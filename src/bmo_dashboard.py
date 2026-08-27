@@ -1,7 +1,11 @@
 """
-BMO Gradio Dashboard & Live Voice Pipeline Interface
-====================================================
-Integrates Whisper ASR, Qwen LLM, and Kokoro ONNX TTS directly with the animated BMO Gradio interface.
+BMO Gradio Dashboard & Live State Machine UI
+============================================
+Interactive animated BMO chassis with state-driven facial expressions:
+- Idle: Default green face with smile and blinking eyes.
+- Listening: Audio waveform background.
+- Thinking: Grid face background.
+- Speaking: Animated mouth talking loop while audio plays.
 """
 
 import sys
@@ -33,12 +37,11 @@ def _patched_create_audio(self, phonemes, voice, speed):
 
 Kokoro._create_audio = _patched_create_audio
 
-# Model paths on D: drive
 MODELS_DIR = Path(r"D:\BMO-Research\models")
 KOKORO_MODEL = MODELS_DIR / "kokoro-v1.0.onnx"
 KOKORO_VOICES = MODELS_DIR / "voices-v1.0.bin"
 
-print("[*] Initializing global ML models for Gradio dashboard...")
+print("[*] Initializing global ML models for BMO State Dashboard...")
 print("  1/2 Loading Whisper ASR (base)...")
 whisper_model = Model("base", n_threads=4)
 
@@ -47,70 +50,86 @@ kokoro = Kokoro(str(KOKORO_MODEL), str(KOKORO_VOICES))
 print("[OK] Models initialized successfully!\n")
 
 css_styles = """
-#bmo-container {
-    background-color: #3ca993;
-    width: 400px;
-    height: 520px;
-    border: 4px solid #000;
-    border-radius: 20px;
-    position: relative;
-    margin: 0 auto;
+#bmo-container { background-color: #3ca993; width: 400px; height: 520px; border: 4px solid #000; border-radius: 20px; position: relative; margin: 0 auto; }
+.bmo-screen { background-color: #b7efcc; width: 350px; height: 220px; border: 4px solid #000; border-radius: 15px; position: absolute; top: 20px; left: 21px; box-sizing: border-box; transition: background 0.2s ease; overflow: hidden; }
+
+/* State 1: Listening (Sound Wave) */
+.bmo-screen.listening {
+    background-color: #112a20;
 }
-.bmo-screen {
-    background-color: #b7efcc;
-    width: 350px;
-    height: 220px;
-    border: 4px solid #000;
-    border-radius: 15px;
-    position: absolute;
-    top: 20px;
-    left: 21px;
-    box-sizing: border-box;
+
+/* State 2: Thinking (Grid Face) */
+.bmo-screen.thinking {
+    background-color: #2c5e50;
 }
-.bmo-eye {
-    background: #000;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    position: absolute;
-    top: 35%;
-    animation: blink 4s infinite;
+
+/* Hide SVG/CSS face elements during listening/thinking image overlay states */
+.bmo-screen.listening .bmo-eye, .bmo-screen.listening .bmo-mouth,
+.bmo-screen.thinking .bmo-eye, .bmo-screen.thinking .bmo-mouth {
+    display: none;
 }
+
+/* Eyes & Blinking */
+.bmo-eye { background: #000; width: 16px; height: 16px; border-radius: 50%; position: absolute; top: 35%; animation: blink 4s infinite; }
 .bmo-eye.left { left: 25%; }
 .bmo-eye.right { right: 25%; }
 @keyframes blink {
     0%, 96%, 98%, 100% { transform: scaleY(1); }
     97% { transform: scaleY(0.1); }
 }
+
+/* Idle Smile */
 .bmo-mouth {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translateX(-50%);
-    width: 70px;
-    height: 35px;
+    width: 65px;
+    height: 32px;
     border: 4px solid #000;
     border-top: transparent;
     border-left: transparent;
     border-right: transparent;
     border-radius: 0 0 50px 50px;
+    transition: all 0.15s ease;
 }
-@keyframes speak-anim {
-    0%, 100% { height: 10px; width: 40px; border-radius: 20px; background: #000; top: 60%; border: 4px solid #000; }
-    50% { height: 35px; width: 50px; border-radius: 30px; background: transparent; top: 55%; border: 4px solid #000; }
-}
+
+/* State 3: Speaking Animation (Mouth opening and closing) */
 .bmo-mouth.speaking {
-    animation: speak-anim 0.3s infinite;
-    border-top: 4px solid #000;
-    border-left: 4px solid #000;
-    border-right: 4px solid #000;
+    animation: talk-anim 0.25s infinite alternate ease-in-out;
+    background: #112a20;
+    border: 3px solid #000;
 }
+
+@keyframes talk-anim {
+    0% {
+        height: 12px;
+        width: 35px;
+        border-radius: 20px;
+        top: 58%;
+    }
+    50% {
+        height: 28px;
+        width: 48px;
+        border-radius: 50% 50% 45% 45%;
+        top: 52%;
+    }
+    100% {
+        height: 38px;
+        width: 52px;
+        border-radius: 40% 40% 50% 50%;
+        top: 50%;
+    }
+}
+
+/* Chassis Hardware Details */
 .bmo-slot { position: absolute; background: #112a20; border: 4px solid #000; width: 200px; height: 15px; top: 260px; left: 30px; }
 .bmo-sbc { position: absolute; background: #0000ff; border: 4px solid #000; width: 20px; height: 20px; border-radius: 50%; top: 255px; right: 50px; }
 .bmo-dpad-svg { position: absolute; top: 310px; left: 30px; width: 100px; height: 100px; }
 .bmo-triangle-svg { position: absolute; top: 310px; right: 110px; width: 40px; height: 40px; }
 .bmo-gc { position: absolute; background: #33ff33; border: 4px solid #000; width: 25px; height: 25px; border-radius: 50%; top: 325px; right: 50px; }
-.bmo-rc { position: absolute; background: #ff0000; border: 4px solid #000; width: 60px; height: 60px; border-radius: 50%; bottom: 60px; right: 50px; }
+.bmo-rc { position: absolute; background: #ff0000; border: 4px solid #000; width: 60px; height: 60px; border-radius: 50%; bottom: 60px; right: 50px; cursor: pointer; transition: transform 0.1s; }
+.bmo-rc:active { transform: scale(0.92); }
 .bmo-pill { position: absolute; background: #0000ff; border: 4px solid #000; width: 45px; height: 15px; border-radius: 15px; bottom: 25px; }
 .bmo-pill.p1 { left: 40px; }
 .bmo-pill.p2 { left: 105px; }
@@ -121,29 +140,42 @@ bmo_html = f"""
 {css_styles}
 </style>
 <div id="bmo-container">
-    <div class="bmo-screen">
+    <div id="bmo-screen" class="bmo-screen">
         <div class="bmo-eye left"></div>
         <div class="bmo-eye right"></div>
         <div id="bmo-mouth" class="bmo-mouth"></div>
     </div>
-    <div class="bmo-slot"></div>
-    <div class="bmo-sbc"></div>
-    <svg class="bmo-dpad-svg" viewBox="0 0 100 100">
-        <path d="M 35 5 L 65 5 L 65 35 L 95 35 L 95 65 L 65 65 L 65 95 L 35 95 L 35 65 L 5 65 L 5 35 L 35 35 Z" fill="#ffcc00" stroke="#000" stroke-width="4" stroke-linejoin="round"/>
-    </svg>
-    <svg class="bmo-triangle-svg" viewBox="0 0 100 100">
-        <polygon points="50,10 90,90 10,90" fill="#00ccff" stroke="#000" stroke-width="6" stroke-linejoin="round"/>
-    </svg>
+    <div class="bmo-slot"></div><div class="bmo-sbc"></div>
+    <svg class="bmo-dpad-svg" viewBox="0 0 100 100"><path d="M 35 5 L 65 5 L 65 35 L 95 35 L 95 65 L 65 65 L 65 95 L 35 95 L 35 65 L 5 65 L 5 35 L 35 35 Z" fill="#ffcc00" stroke="#000" stroke-width="4" stroke-linejoin="round"/></svg>
+    <svg class="bmo-triangle-svg" viewBox="0 0 100 100"><polygon points="50,10 90,90 10,90" fill="#00ccff" stroke="#000" stroke-width="6" stroke-linejoin="round"/></svg>
     <div class="bmo-gc"></div>
-    <div class="bmo-rc"></div>
-    <div class="bmo-pill p1"></div>
-    <div class="bmo-pill p2"></div>
+    <div class="bmo-rc" onclick="window.setBMOState('listening')"></div>
+    <div class="bmo-pill p1"></div><div class="bmo-pill p2"></div>
 </div>
+<script>
+    window.setBMOState = function(state) {{
+        const screen = document.getElementById('bmo-screen');
+        const mouth = document.getElementById('bmo-mouth');
+        if (!screen || !mouth) return;
+
+        // Reset all dynamic state classes
+        screen.className = 'bmo-screen';
+        mouth.classList.remove('speaking');
+
+        if (state === 'listening') {{
+            screen.classList.add('listening');
+        }} else if (state === 'thinking') {{
+            screen.classList.add('thinking');
+        }} else if (state === 'speaking') {{
+            mouth.classList.add('speaking');
+        }}
+    }};
+</script>
 """
 
 def bmo_pipeline(audio_data):
     if audio_data is None:
-        return None, "Silence detected."
+        return None, "Silence detected.", "idle"
 
     print("\n[*] Processing incoming audio stream...")
     
@@ -202,7 +234,7 @@ def bmo_pipeline(audio_data):
     samples_int16 = (samples_flat * 32767).astype(np.int16)
     wav.write(out_wav, sr, samples_int16)
 
-    return out_wav, f"User: {user_text}\nBMO: {bmo_text}"
+    return out_wav, f"User: {user_text}\nBMO: {bmo_text}", "speaking"
 
 with gr.Blocks() as demo:
     gr.Markdown("<h1 style='text-align: center;'>🤖 BMO Live Edge Tutor</h1>")
@@ -214,9 +246,21 @@ with gr.Blocks() as demo:
             audio_in = gr.Audio(sources=["microphone"], type="numpy", label="Speak to BMO")
             audio_out = gr.Audio(label="BMO Response", autoplay=True)
             txt_log = gr.Textbox(label="Conversation Log", lines=4)
+            bmo_state = gr.Textbox(visible=False)
             btn = gr.Button("Talk to BMO", variant="primary")
-            btn.click(fn=bmo_pipeline, inputs=[audio_in], outputs=[audio_out, txt_log])
+            
+            btn.click(
+                fn=bmo_pipeline, 
+                inputs=[audio_in], 
+                outputs=[audio_out, txt_log, bmo_state]
+            )
+
+    bmo_state.change(
+        fn=None,
+        inputs=[bmo_state],
+        js="(state) => window.setBMOState(state)"
+    )
 
 if __name__ == "__main__":
-    print("[*] Launching BMO Live Edge Tutor Dashboard on http://127.0.0.1:7866 ...")
-    demo.launch(server_name="127.0.0.1", server_port=7866)
+    print("[*] Launching BMO State Machine Dashboard on http://127.0.0.1:7868 ...")
+    demo.launch(server_name="127.0.0.1", server_port=7868)
