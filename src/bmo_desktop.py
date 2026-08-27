@@ -18,12 +18,19 @@ except ImportError as e:
     sys.exit(1)
 
 # --- MODELS SETUP ---
-MODELS_DIR = Path(r"D:\BMO-Research\models")
+BASE_DIR = Path(getattr(sys, '_MEIPASS', Path(sys.executable).parent))
+LOCAL_MODELS_DIR = BASE_DIR / "models"
+
+if LOCAL_MODELS_DIR.exists() and (LOCAL_MODELS_DIR / "bmo-model-4bit.gguf").exists():
+    MODELS_DIR = LOCAL_MODELS_DIR
+else:
+    MODELS_DIR = Path(r"D:\BMO-Research\models")
+
 LLM_PATH = MODELS_DIR / "bmo-model-4bit.gguf"
 KOKORO_MODEL = MODELS_DIR / "kokoro-v1.0.onnx"
 KOKORO_VOICES = MODELS_DIR / "voices-v1.0.bin"
 
-print("[*] Initializing BMO Native Desktop Engine...")
+print(f"[*] Initializing BMO Native Desktop Engine using models from: {MODELS_DIR}")
 whisper_model = whisper.load_model("small")
 
 try:
