@@ -347,6 +347,38 @@ class BmoBridge:
         self.memory = SessionMemoryEngine()
         
         # Inject warm-up instruction based on past session history
+def clean_hallucinated_text(text: str) -> str:
+    """Detects and removes Whisper repetition hallucination loops on trailing audio."""
+    if not text:
+        return ""
+    # Strip repeating sentence/phrase loops
+    sentences = [s.strip() for s in text.replace(".", ".|").replace("!", "!|").replace("?", "?|").split("|") if s.strip()]
+    if len(sentences) > 2:
+        seen = []
+        for s in sentences:
+            if s in seen:
+                break
+            seen.append(s)
+        text = " ".join(seen)
+    
+    # Strip repeating 2-4 word phrases
+    words = text.split()
+    if len(words) > 6:
+        cleaned_words = []
+        for i, w in enumerate(words):
+            if i >= 4 and words[i-4:i] == words[i-8:i-4]:
+                break
+            cleaned_words.append(w)
+        text = " ".join(cleaned_words)
+    return text.strip()
+
+class BmoBridge:
+    def __init__(self):
+        self.history = []
+        self.memory = SessionMemoryEngine()
+        self.roleplay = RoleplayEngine()
+        self.scaffolding = ScaffoldingEngine()
+        
         warmup_instruction = self.memory.get_warmup_prompt()
         self.warmup_prompt = f"{BMO_SYSTEM_PROMPT}\n\nCONTEXTE D'ACCUEIL :\n{warmup_instruction}"
 
@@ -371,18 +403,19 @@ class BmoBridge:
             audio_data = np.concatenate(AUDIO_BUFFER, axis=0).flatten()
             AUDIO_BUFFER.clear()
 
-            # 1. French-Only Whisper ASR
+            # 1. Fast French-Only Whisper ASR (Optimized beam_size=1 for CPU)
             result = whisper_model.transcribe(
                 audio_data, 
                 fp16=False, 
                 language="fr",
-                initial_prompt="Le nom du robot est BMO (prononcé Beemo). Transcription exacte du français parlé. BMO, Beemo, Bemo. Conserver les erreurs de prononciation sans les corriger.",
-                beam_size=5,          # Increases search accuracy for tricky phonemes
-                best_of=5,            # Evaluates multiple candidates to pick the best sentence
-                temperature=0.0,      # Deterministic decoding to prevent hallucinated words
+                initial_prompt="Le nom du robot est BMO (prononcé Beemo). Transcription exacte du français parlé.",
+                beam_size=1,          # Fast CPU decoding (1x beam)
+                best_of=1,            # 5x speedup on CPU
+                temperature=0.0,      # Deterministic decoding
                 condition_on_previous_text=False
             )
             raw_text = result.get("text", "").strip() or "Bonjour BMO!"
+            raw_text = clean_hallucinated_text(raw_text)
             user_text = normalize_bmo_name(raw_text)
 
             # Detect exit command to save session
@@ -464,8 +497,8 @@ class BmoBridge:
             if has_llm:
                 full_resp = llm.create_chat_completion(
                     messages=llm_msgs, 
-                    max_tokens=160,
-                    temperature=0.1,      # Keeps the logic locked down and precise
+                    max_tokens=220,
+                    temperature=0.3,
                     top_p=0.9
                 )["choices"][0]["message"]["content"]
             else:
