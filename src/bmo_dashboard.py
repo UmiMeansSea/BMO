@@ -1,9 +1,9 @@
 """
-BMO Gradio Dashboard - Complete Integrated System
-=================================================
+BMO Gradio Dashboard - Complete Integrated System (Pure Python Audio Pipeline)
+==============================================================================
 Combines:
 1. Animated State Machine UI (Idle, Listening, Thinking, Speaking).
-2. Live Voice Pipeline (PyTorch Whisper ASR + Qwen LLM + Kokoro TTS).
+2. Pure Python Audio Pipeline (scipy WAV read/resample -> Whisper/LLM/Kokoro).
 3. DSP Cartoon Voice Timbre (+4.0 semitone pitch shift & 1.15x speed).
 """
 
@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import numpy as np
 import scipy.io.wavfile as wav
+import scipy.signal
 import librosa
 
 try:
@@ -69,23 +70,17 @@ css_styles = """
 #bmo-container { background-color: #3ca993; width: 400px; height: 520px; border: 4px solid #000; border-radius: 20px; position: relative; margin: 0 auto; }
 .bmo-screen { background-color: #b7efcc; width: 350px; height: 220px; border: 4px solid #000; border-radius: 15px; position: absolute; top: 20px; left: 21px; box-sizing: border-box; transition: background 0.2s ease; overflow: hidden; }
 
-/* State 1: Listening (Sound Wave Screen) */
-.bmo-screen.listening {
-    background-color: #112a20;
-}
+/* State 1: Listening */
+.bmo-screen.listening { background-color: #112a20; }
 
-/* State 2: Thinking (Grid Face Screen) */
-.bmo-screen.thinking {
-    background-color: #2c5e50;
-}
+/* State 2: Thinking */
+.bmo-screen.thinking { background-color: #2c5e50; }
 
-/* Hide SVG/CSS face elements during listening/thinking states */
 .bmo-screen.listening .bmo-eye, .bmo-screen.listening .bmo-mouth,
 .bmo-screen.thinking .bmo-eye, .bmo-screen.thinking .bmo-mouth {
     display: none;
 }
 
-/* Eyes & Blinking Animation */
 .bmo-eye { background: #000; width: 16px; height: 16px; border-radius: 50%; position: absolute; top: 35%; animation: blink 4s infinite; }
 .bmo-eye.left { left: 25%; }
 .bmo-eye.right { right: 25%; }
@@ -94,7 +89,6 @@ css_styles = """
     97% { transform: scaleY(0.1); }
 }
 
-/* Idle Smile */
 .bmo-mouth {
     position: absolute;
     top: 50%;
@@ -110,7 +104,6 @@ css_styles = """
     transition: all 0.15s ease;
 }
 
-/* State 3: Speaking Animation (Keyframe mouth loop) */
 .bmo-mouth.speaking {
     animation: talk-anim 0.25s infinite alternate ease-in-out;
     background: #112a20;
@@ -118,27 +111,11 @@ css_styles = """
 }
 
 @keyframes talk-anim {
-    0% {
-        height: 12px;
-        width: 35px;
-        border-radius: 20px;
-        top: 58%;
-    }
-    50% {
-        height: 28px;
-        width: 48px;
-        border-radius: 50% 50% 45% 45%;
-        top: 52%;
-    }
-    100% {
-        height: 38px;
-        width: 52px;
-        border-radius: 40% 40% 50% 50%;
-        top: 50%;
-    }
+    0% { height: 12px; width: 35px; border-radius: 20px; top: 58%; }
+    50% { height: 28px; width: 48px; border-radius: 50% 50% 45% 45%; top: 52%; }
+    100% { height: 38px; width: 52px; border-radius: 40% 40% 50% 50%; top: 50%; }
 }
 
-/* Chassis Hardware Details */
 .bmo-slot { position: absolute; background: #112a20; border: 4px solid #000; width: 200px; height: 15px; top: 260px; left: 30px; }
 .bmo-sbc { position: absolute; background: #0000ff; border: 4px solid #000; width: 20px; height: 20px; border-radius: 50%; top: 255px; right: 50px; }
 .bmo-dpad-svg { position: absolute; top: 310px; left: 30px; width: 100px; height: 100px; }
@@ -194,38 +171,31 @@ def bmo_pipeline(audio_data):
 
     print("\n[*] Processing incoming audio stream...")
     
-    target_16k_wav = "bmo_input_16k.wav"
+    # Extract audio array directly from Gradio tuple or read WAV file via scipy
     if isinstance(audio_data, tuple):
         sr, arr = audio_data
-        if sr != 16000:
-            import scipy.signal
-            num_samples = int(len(arr) * 16000 / sr)
-            arr = scipy.signal.resample(arr, num_samples)
-            sr = 16000
-        
-        if arr.dtype != np.int16:
-            if arr.dtype == np.float32 or arr.dtype == np.float64:
-                arr = (arr * 32767).astype(np.int16)
-            else:
-                arr = arr.astype(np.int16)
-        
-        wav.write(target_16k_wav, 16000, arr)
     else:
         try:
-            orig_sr, arr = wav.read(audio_data)
-            if orig_sr != 16000:
-                import scipy.signal
-                num_samples = int(len(arr) * 16000 / orig_sr)
-                arr = scipy.signal.resample(arr, num_samples)
-            if arr.dtype != np.int16:
-                arr = (arr * 32767).astype(np.int16)
-            wav.write(target_16k_wav, 16000, arr)
-        except Exception as e:
-            print(f"[!] WAV resample warning: {e}")
-            target_16k_wav = audio_data
+            sr, arr = wav.read(audio_data)
+        except Exception:
+            sr, arr = 44100, np.zeros(44100, dtype=np.float32)
 
-    # 1. Ears: Transcribe speech with PyTorch Whisper ASR
-    result = whisper_model.transcribe(target_16k_wav, language="fr")
+    # Convert to 1D float32 array normalized to [-1.0, 1.0]
+    arr = np.asarray(arr, dtype=np.float32)
+    if arr.ndim > 1:
+        arr = arr.mean(axis=1)
+    if np.max(np.abs(arr)) > 1.0:
+        arr = arr / 32768.0
+
+    # Resample float32 audio to 16,000 Hz directly in Python (bypassing ffmpeg sub-process calls)
+    if sr != 16000:
+        num_samples = int(len(arr) * 16000 / sr)
+        arr_16k = scipy.signal.resample(arr, num_samples).astype(np.float32)
+    else:
+        arr_16k = arr
+
+    # 1. Ears: Transcribe directly from numpy array via PyTorch Whisper ASR
+    result = whisper_model.transcribe(arr_16k, language="fr")
     user_text = result.get("text", "").strip()
     if not user_text:
         user_text = "Bonjour !"
@@ -248,10 +218,10 @@ def bmo_pipeline(audio_data):
     print(f"  [Brain] BMO generated: \"{bmo_text}\"")
 
     # 3. Voice & DSP: Synthesize with Kokoro (1.15x speed) & Pitch Shift (+4.0 semitones)
-    sr = 24000
+    sr_out = 24000
     if has_kokoro:
         try:
-            samples, sr = kokoro.create(bmo_text, voice="ff_siwis", speed=1.15, lang="fr-fr")
+            samples, sr_out = kokoro.create(bmo_text, voice="ff_siwis", speed=1.15, lang="fr-fr")
             samples = samples.squeeze().astype(np.float32)
         except Exception:
             t = np.linspace(0, 1.5, int(24000 * 1.5), False)
@@ -261,13 +231,12 @@ def bmo_pipeline(audio_data):
         samples = np.sin(2 * np.pi * 520 * t).astype(np.float32) * 0.3
 
     print("  [Voice DSP] Pitch shifting +4.0 semitones with librosa...")
-    samples_shifted = librosa.effects.pitch_shift(y=samples, sr=sr, n_steps=4.0)
+    samples_shifted = librosa.effects.pitch_shift(y=samples, sr=sr_out, n_steps=4.0)
 
     out_wav = "bmo_live_response.wav"
     samples_int16 = (samples_shifted * 32767).astype(np.int16)
-    wav.write(out_wav, sr, samples_int16)
+    wav.write(out_wav, sr_out, samples_int16)
 
-    # Returns audio player file, text conversation log, and 'speaking' UI state
     return out_wav, f"User: {user_text}\nBMO: {bmo_text}", "speaking"
 
 with gr.Blocks() as demo:
@@ -296,5 +265,5 @@ with gr.Blocks() as demo:
     )
 
 if __name__ == "__main__":
-    print("[*] Launching Integrated BMO Dashboard on http://127.0.0.1:7880 ...")
-    demo.launch(server_name="127.0.0.1", server_port=7880)
+    print("[*] Launching Pure-Python BMO Dashboard on http://127.0.0.1:7882 ...")
+    demo.launch(server_name="127.0.0.1", server_port=7882)
