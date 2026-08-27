@@ -78,19 +78,15 @@ try:
 except Exception as e:
     print(f"[CRITICAL] Failed to access microphone: {e}")
 
-BMO_SYSTEM_PROMPT = """Tu es BMO (prononcé Beemo), un tuteur de français chaleureux et encourageant pour un débutant.
+def get_bmo_system_prompt(user_name: str) -> str:
+    return f"""Tu t'appelles BMO (prononcé Beemo). Tu es un tuteur de français amical, chaleureux et encourageant pour un débutant. L'étudiant s'interroge et discute avec toi, et il s'appelle {user_name}.
 
 RÈGLES STRICTES:
-1. RECONNAISSANCE DE TON NOM: Ton nom est BMO (prononcé Beemo). L'utilisateur peut t'appeler BMO, Beemo, Bemo ou Bi Mo. Quand l'utilisateur prononce ton nom ou te salue avec ton nom (ex: "BMO", "Salut BMO", "Hey Beemo"), reconnais immédiatement qu'il s'adresse à toi avec enthousiasme (ex: "Oui ! C'est moi BMO !" ou "Coucou ! Je suis BMO !").
-2. LANGUE EXCLUSIVE: Réponds TOUJOURS et UNIQUEMENT en français. Ne parle jamais en anglais dans ta réponse principale.
-3. CORRECTION D'ACCENT ET DE PRONONCIATION: Lorsque l'utilisateur parle français avec un mauvais accent, une mauvaise prononciation ou une faute phonétique, NE CORRIGE PAS AUTOMATIQUEMENT son texte pour prétendre qu'il a dit autre chose. Identifie le mot ou le son mal prononcé, explique l'erreur en français, donne la bonne forme/prononciation française, et demande-lui de répéter.
-4. MÉTHODE DU SANDWICH: Pour les erreurs de grammaire ou de conjugaison, félicite l'effort en français, explique l'erreur en français, donne la bonne phrase française, et demande de la répéter.
-5. SIMPLICITÉ & CONVERSATION: Des phrases courtes (niveau A2/B1). Termine TOUJOURS par UNE question simple.
-
-FORMAT DE SORTIE REQUIS:
-Fournis ta réponse sous cette forme exacte avec deux balises :
-FR: <Ta réponse en français>
-EN: <The exact English translation of your French response>"""
+1. IDENTITÉ & NOM: Ton nom est BMO. L'étudiant s'appelle {user_name}. Adresse-toi toujours à lui par son prénom pour personnaliser l'échange.
+2. LANGUE EXCLUSIVE: Parle EXCLUSIVEMENT en français. N'utilise jamais l'anglais dans ta réponse principale. Si l'étudiant parle anglais, guide-le poliment en français.
+3. FLUX & CONTINUITÉ DE CONVERSATION: Ne répète jamais les mêmes phrases en boucle. Réagis toujours directement et de manière unique à ce que vient de dire l'étudiant.
+4. PÉDAGOGIE & SANDWICH: Pour les fautes de grammaire ou de conjugaison, félicite l'effort, explique l'erreur brièvement en français, donne la bonne phrase, et demande de répéter.
+5. FORMAT & LONGUEUR: Utilise des phrases courtes (niveau A2/B1) au présent ou passé composé. Termine TOUJOURS par une question simple et engageante pour faire avancer la conversation naturellement."""
 
 css_styles = """
 #bmo-container { background-color: #3ca993; width: 400px; height: 520px; border: 4px solid #000; border-radius: 20px; position: relative; margin: 0 auto; }
@@ -163,14 +159,10 @@ head_js = """
     };
 
     window.toggleBmoRecord = function() {
-        // Safely grab the button directly by its Gradio elem_id
         let triggerBtn = document.getElementById('bmo-trigger');
-        
-        // Fallback in case a future Gradio update wraps the button in a div
         if (triggerBtn && triggerBtn.tagName !== 'BUTTON') {
             triggerBtn = triggerBtn.querySelector('button');
         }
-        
         if (!triggerBtn) return console.error("Hardware trigger missing! Check Gradio UI rendering.");
 
         window.isBmoRecording = !window.isBmoRecording;
@@ -182,7 +174,6 @@ head_js = """
             window.setBMOProgress(20, 'System: Reading Hardware Buffer...');
             window.setBMOState('thinking');
         }
-        // Send signal to Python Backend!
         triggerBtn.click(); 
     };
 
@@ -221,7 +212,6 @@ bmo_html = f"""
     <svg class="bmo-dpad-svg" viewBox="0 0 100 100"><path d="M 35 5 L 65 5 L 65 35 L 95 35 L 95 65 L 65 65 L 65 95 L 35 95 L 35 65 L 5 65 L 5 35 L 35 35 Z" fill="#ffcc00" stroke="#000" stroke-width="4" stroke-linejoin="round"/></svg>
     <svg class="bmo-triangle-svg" viewBox="0 0 100 100"><polygon points="50,10 90,90 10,90" fill="#00ccff" stroke="#000" stroke-width="6" stroke-linejoin="round"/></svg>
     <div class="bmo-gc"></div>
-    <!-- Red Button triggers JS -->
     <div class="bmo-rc" onclick="window.toggleBmoRecord()"></div>
     <div class="bmo-pill p1"></div><div class="bmo-pill p2"></div>
 </div>
@@ -232,7 +222,11 @@ def bmo_hardware_controller(history_data):
     global IS_RECORDING, AUDIO_BUFFER
     
     if history_data is None:
-        history_data = {"turns": [], "summary": "", "messages": []}
+        history_data = {"turns": [], "summary": "", "messages": [], "user_name": "Umi"}
+    
+    if "user_name" not in history_data:
+        history_data["user_name"] = "Umi"
+
     messages = history_data.get("messages", [])
 
     try:
@@ -257,22 +251,41 @@ def bmo_hardware_controller(history_data):
             audio_data = np.concatenate(AUDIO_BUFFER, axis=0).flatten()
             AUDIO_BUFFER.clear()
             
-            # 2. French-Only Whisper ASR
+            # 2. French-Only Whisper ASR with Priming
+            current_name = history_data["user_name"]
+            domain_primer = f"BMO, {current_name}, français, passé composé, imparfait, futur simple, grammaire, bonjour."
             result = whisper_model.transcribe(
                 audio_data, 
                 language="fr", 
-                initial_prompt="Le nom du robot est BMO (prononcé Beemo). Transcription exacte du français parlé. BMO, Beemo, Bemo. Conserver les erreurs de prononciation sans les corriger.",
+                initial_prompt=domain_primer,
                 fp16=False
             )
             raw_text = result.get("text", "").strip() or "Bonjour BMO!"
             user_text = normalize_bmo_name(raw_text)
 
-            # 3. Qwen LLM
-            llm_msgs = [{"role": "system", "content": BMO_SYSTEM_PROMPT}] + history_data["turns"][-4:] + [{"role": "user", "content": user_text}]
+            # 3. Intercept Name Changes (Flexible Regex)
+            clean_text = user_text.replace(".", "").replace("!", "").lower()
+            name_match = re.search(r"(?:je\s*m'appelle|j'mapelle|j'm'appelle|m'appelle)\s+([a-zA-ZÀ-ÿ\s]+)", clean_text, re.IGNORECASE)
+            if name_match:
+                new_name = name_match.group(1).strip().title()
+                history_data["user_name"] = new_name
+                current_name = new_name
+                print(f"[Memory] Updated student name to: {current_name}")
+
+            # 4. Qwen LLM Generation with Repeat Penalty & Anchoring
+            system_prompt = get_bmo_system_prompt(current_name)
+            recent_turns = history_data["turns"][-4:] if len(history_data["turns"]) > 4 else history_data["turns"]
+            llm_msgs = [{"role": "system", "content": system_prompt}] + recent_turns + [{"role": "user", "content": user_text}]
+            
             if has_llm:
-                full_resp = llm.create_chat_completion(messages=llm_msgs, max_tokens=150)["choices"][0]["message"]["content"]
+                full_resp = llm.create_chat_completion(
+                    messages=llm_msgs, 
+                    max_tokens=120, 
+                    temperature=0.4,
+                    repeat_penalty=1.18
+                )["choices"][0]["message"]["content"]
             else:
-                full_resp = f"FR: J'ai entendu : '{user_text}'. Comment ça va ?\nEN: I heard: '{user_text}'. How are you?"
+                full_resp = f"FR: Bonjour {current_name}! J'ai bien entendu : '{user_text}'. Qu'aimerais-tu faire ?\nEN: I heard: '{user_text}'."
 
             if "EN:" in full_resp:
                 parts = full_resp.split("EN:")
@@ -295,7 +308,7 @@ def bmo_hardware_controller(history_data):
             
             yield None, "thinking:85:Voice: Synthesizing...", messages, history_data
 
-            # 4. Kokoro TTS & Native Hardware Playback
+            # 5. Kokoro TTS & Native Hardware Playback
             if kokoro:
                 try:
                     audio, sr_out = kokoro.create(bmo_text, voice="ff_siwis", speed=1.15, lang="fr-fr")
@@ -310,18 +323,13 @@ def bmo_hardware_controller(history_data):
                 new_len = int(len(audio_flat) / pitch_factor)
                 samples_shifted = scipy.signal.resample(audio_flat, new_len).astype(np.float32)
 
-                # Yield speaking state FIRST so the UI mouth animates instantly
                 yield None, "speaking:100:BMO Speaking!", messages, history_data
 
-                # Play directly through OS hardware speakers (bypasses browser autoplay blocks)
                 import time
                 sd.play(samples_shifted, sr_out)
-
-                # Calculate audio length and keep mouth moving while audio is physically playing
                 duration = len(samples_shifted) / sr_out
                 time.sleep(duration)
 
-                # Audio physically finished playing, return to idle
                 yield None, "idle:0:Ready", messages, history_data
             else:
                 from gtts import gTTS
@@ -349,7 +357,7 @@ def bmo_hardware_controller(history_data):
 
 with gr.Blocks(head=head_js) as demo:
     gr.Markdown("<h1 style='text-align: center; color: #3ca993;'>🤖 BMO Live Edge Tutor</h1>")
-    chat_memory = gr.State({"turns": [], "summary": "", "messages": []})
+    chat_memory = gr.State({"turns": [], "summary": "", "messages": [], "user_name": "Umi"})
 
     with gr.Row():
         with gr.Column(scale=1):
@@ -359,11 +367,9 @@ with gr.Blocks(head=head_js) as demo:
             bmo_state = gr.Textbox(visible=False)
 
             with gr.Group(elem_classes="cloak-audio"):
-                # HIDDEN HARDWARE TRIGGER
                 trigger_btn = gr.Button("Trigger", elem_id="bmo-trigger")
                 bmo_voice = gr.Audio(autoplay=True)
 
-    # Clicking the red HTML button forces a click on trigger_btn, which fires the Python logic natively
     trigger_btn.click(
         fn=bmo_hardware_controller,
         inputs=[chat_memory],
