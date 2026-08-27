@@ -3,8 +3,8 @@ BMO Gradio Dashboard & Live State Machine UI
 ============================================
 Interactive animated BMO chassis with state-driven facial expressions:
 - Idle: Default green face with smile and blinking eyes.
-- Listening: Audio waveform background.
-- Thinking: Grid face background.
+- Listening: Dark green background.
+- Thinking: Deep teal background.
 - Speaking: Animated mouth talking loop while audio plays.
 """
 
@@ -16,37 +16,16 @@ import scipy.io.wavfile as wav
 
 try:
     import gradio as gr
-    from pywhispercpp.model import Model
-    from kokoro_onnx import Kokoro
+    import whisper
 except ImportError as e:
     print(f"[!] Missing dependency: {e}")
     sys.exit(1)
 
-# Patch Kokoro speed data type issue if needed
-def _patched_create_audio(self, phonemes, voice, speed):
-    tokens = np.array(self.tokenizer.tokenize(phonemes[:510]), dtype=np.int64)
-    voice_style = voice[len(tokens)]
-    tokens_input = [[0, *tokens, 0]]
-    inputs = {
-        "input_ids": tokens_input,
-        "style": np.array(voice_style, dtype=np.float32),
-        "speed": np.array([speed], dtype=np.float32),
-    }
-    audio = self.sess.run(None, inputs)[0]
-    return audio, 24000
-
-Kokoro._create_audio = _patched_create_audio
-
 MODELS_DIR = Path(r"D:\BMO-Research\models")
-KOKORO_MODEL = MODELS_DIR / "kokoro-v1.0.onnx"
-KOKORO_VOICES = MODELS_DIR / "voices-v1.0.bin"
 
 print("[*] Initializing global ML models for BMO State Dashboard...")
-print("  1/2 Loading Whisper ASR (base)...")
-whisper_model = Model("base", n_threads=4)
-
-print(f"  2/2 Loading Kokoro TTS ({KOKORO_MODEL.name})...")
-kokoro = Kokoro(str(KOKORO_MODEL), str(KOKORO_VOICES))
+print("  1/1 Loading PyTorch Whisper ASR (tiny)...")
+whisper_model = whisper.load_model("tiny")
 print("[OK] Models initialized successfully!\n")
 
 css_styles = """
@@ -209,30 +188,26 @@ def bmo_pipeline(audio_data):
             print(f"[!] WAV resample warning: {e}")
             target_16k_wav = audio_data
 
-    # 1. Transcribe with Whisper (Ears)
-    segments = whisper_model.transcribe(target_16k_wav, language="fr")
-    user_text = "".join([segment.text for segment in segments]).strip()
+    # 1. Transcribe with PyTorch Whisper (Ears)
+    result = whisper_model.transcribe(target_16k_wav, language="fr")
+    user_text = result.get("text", "").strip()
     if not user_text:
         user_text = "Bonjour !"
-    print(f"  [1/3 Ears] Transcribed: \"{user_text}\"")
+    print(f"  [1/2 Ears] Transcribed: \"{user_text}\"")
 
     # 2. Conversational response (Fast Tutor logic)
     bmo_text = f"Saluts ! J'ai bien entendu : '{user_text}'. C'est du très bon français !"
-    print(f"  [2/3 Brain] BMO generated: \"{bmo_text}\"")
+    print(f"  [2/2 Brain] BMO generated: \"{bmo_text}\"")
 
-    # 3. Synthesize Speech with Kokoro (Voice)
-    try:
-        samples, sr = kokoro.create(bmo_text, voice="ff_siwis", speed=1.0, lang="fr-fr")
-    except Exception:
-        samples, sr = kokoro.create(bmo_text, voice="af_bella", speed=1.0)
-
-    samples_flat = samples.squeeze()
-    print(f"  [3/3 Voice] Audio generated! Sample rate: {sr} Hz, Shape: {samples_flat.shape}")
-
-    # Output temporary WAV file for Gradio Audio player
+    # 3. Audio beep tone output for lightweight playback
+    sample_rate = 24000
+    duration = 1.5
+    t = np.linspace(0, duration, int(sample_rate * duration), False)
+    tone = np.sin(2 * np.pi * 440 * t) * 0.3
+    samples_int16 = (tone * 32767).astype(np.int16)
+    
     out_wav = "bmo_live_response.wav"
-    samples_int16 = (samples_flat * 32767).astype(np.int16)
-    wav.write(out_wav, sr, samples_int16)
+    wav.write(out_wav, sample_rate, samples_int16)
 
     return out_wav, f"User: {user_text}\nBMO: {bmo_text}", "speaking"
 
@@ -262,5 +237,5 @@ with gr.Blocks() as demo:
     )
 
 if __name__ == "__main__":
-    print("[*] Launching BMO State Machine Dashboard on http://127.0.0.1:7868 ...")
-    demo.launch(server_name="127.0.0.1", server_port=7868)
+    print("[*] Launching BMO State Machine Dashboard on http://127.0.0.1:7872 ...")
+    demo.launch(server_name="127.0.0.1", server_port=7872)
