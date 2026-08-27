@@ -1,11 +1,12 @@
 """
-BMO Live Edge Tutor - Integrated Memory & Voice Dashboard
-=========================================================
-1. Hybrid Memory: Active Sliding Window (4 turns) + Long-Term Background Memory Summary.
-2. Voice Synthesis Engine:
-   - High-fidelity French Speech Synthesis (gTTS French + librosa DSP pitch shift).
-   - Speed & Pitch: +4.0 semitones pitch shift for BMO's iconic cartoon timbre.
-3. ears & Brain: Whisper ASR (small) + Qwen LLM.
+BMO Live Edge Tutor - Integrated Aesthetic Dashboard & Chatbot UI
+===================================================================
+Features:
+1. Cozy Pastel Green Chatbot UI (Pale-yellow User bubbles, Light-green BMO bubbles).
+2. Animated BMO State Machine (Idle, Listening, Thinking, Speaking).
+3. Red Hardware Button JS Bridge.
+4. Pure Python Scipy + Librosa Cartoon DSP Pitch Shift (+4.0 semitones).
+5. Hybrid Memory Architecture (Active Window + Background Summarization).
 """
 
 import sys
@@ -29,7 +30,7 @@ except ImportError as e:
 MODELS_DIR = Path(r"D:\BMO-Research\models")
 LLM_PATH = MODELS_DIR / "bmo-model-4bit.gguf"
 
-print("[*] Initializing BMO System (Whisper ASR + Qwen LLM + DSP Cartoon TTS)...")
+print("[*] Initializing BMO Aesthetic Chatbot Dashboard System...")
 print("  1/2 Loading Whisper ASR (small)...")
 whisper_model = whisper.load_model("small")
 
@@ -41,7 +42,7 @@ except Exception as e:
     print(f"[!] LLM load notice: {e}")
     has_llm = False
 
-print("[OK] BMO system initialized successfully!\n")
+print("[OK] Integrated BMO system initialized successfully!\n")
 
 BMO_SYSTEM_PROMPT = """You are BMO (pronounced Beemo), an encouraging, highly attentive French language tutor. The user is a beginner (A2/B1).
 RULES:
@@ -51,54 +52,25 @@ RULES:
 4. Keep responses conversational and brief."""
 
 css_styles = """
+/* BMO Chassis & Hardware Animations */
 #bmo-container { background-color: #3ca993; width: 400px; height: 520px; border: 4px solid #000; border-radius: 20px; position: relative; margin: 0 auto; }
 .bmo-screen { background-color: #b7efcc; width: 350px; height: 220px; border: 4px solid #000; border-radius: 15px; position: absolute; top: 20px; left: 21px; box-sizing: border-box; transition: background 0.2s ease; overflow: hidden; }
 
 /* State 1: Listening */
 .bmo-screen.listening { background-color: #112a20; }
-
 /* State 2: Thinking */
 .bmo-screen.thinking { background-color: #2c5e50; }
 
 .bmo-screen.listening .bmo-eye, .bmo-screen.listening .bmo-mouth,
-.bmo-screen.thinking .bmo-eye, .bmo-screen.thinking .bmo-mouth {
-    display: none;
-}
+.bmo-screen.thinking .bmo-eye, .bmo-screen.thinking .bmo-mouth { display: none; }
 
 .bmo-eye { background: #000; width: 16px; height: 16px; border-radius: 50%; position: absolute; top: 35%; animation: blink 4s infinite; }
-.bmo-eye.left { left: 25%; }
-.bmo-eye.right { right: 25%; }
-@keyframes blink {
-    0%, 96%, 98%, 100% { transform: scaleY(1); }
-    97% { transform: scaleY(0.1); }
-}
+.bmo-eye.left { left: 25%; } .bmo-eye.right { right: 25%; }
+@keyframes blink { 0%, 96%, 98%, 100% { transform: scaleY(1); } 97% { transform: scaleY(0.1); } }
 
-.bmo-mouth {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 65px;
-    height: 32px;
-    border: 4px solid #000;
-    border-top: transparent;
-    border-left: transparent;
-    border-right: transparent;
-    border-radius: 0 0 50px 50px;
-    transition: all 0.15s ease;
-}
-
-.bmo-mouth.speaking {
-    animation: talk-anim 0.25s infinite alternate ease-in-out;
-    background: #112a20;
-    border: 3px solid #000;
-}
-
-@keyframes talk-anim {
-    0% { height: 12px; width: 35px; border-radius: 20px; top: 58%; }
-    50% { height: 28px; width: 48px; border-radius: 50% 50% 45% 45%; top: 52%; }
-    100% { height: 38px; width: 52px; border-radius: 40% 40% 50% 50%; top: 50%; }
-}
+.bmo-mouth { position: absolute; top: 50%; left: 50%; transform: translateX(-50%); width: 65px; height: 32px; border: 4px solid #000; border-top: transparent; border-left: transparent; border-right: transparent; border-radius: 0 0 50px 50px; transition: all 0.15s ease; }
+.bmo-mouth.speaking { animation: talk-anim 0.25s infinite alternate ease-in-out; background: #112a20; border: 3px solid #000; }
+@keyframes talk-anim { 0% { height: 12px; width: 35px; border-radius: 20px; top: 58%; } 50% { height: 28px; width: 48px; border-radius: 50% 50% 45% 45%; top: 52%; } 100% { height: 38px; width: 52px; border-radius: 40% 40% 50% 50%; top: 50%; } }
 
 .bmo-slot { position: absolute; background: #112a20; border: 4px solid #000; width: 200px; height: 15px; top: 260px; left: 30px; }
 .bmo-sbc { position: absolute; background: #0000ff; border: 4px solid #000; width: 20px; height: 20px; border-radius: 50%; top: 255px; right: 50px; }
@@ -107,9 +79,12 @@ css_styles = """
 .bmo-gc { position: absolute; background: #33ff33; border: 4px solid #000; width: 25px; height: 25px; border-radius: 50%; top: 325px; right: 50px; }
 .bmo-rc { position: absolute; background: #ff0000; border: 4px solid #000; width: 60px; height: 60px; border-radius: 50%; bottom: 60px; right: 50px; cursor: pointer; transition: transform 0.1s; }
 .bmo-rc:active { transform: scale(0.92); }
-.bmo-pill { position: absolute; background: #0000ff; border: 4px solid #000; width: 45px; height: 15px; border-radius: 15px; bottom: 25px; }
-.bmo-pill.p1 { left: 40px; }
-.bmo-pill.p2 { left: 105px; }
+.bmo-pill { position: absolute; background: #0000ff; border: 4px solid #000; width: 45px; height: 15px; border-radius: 15px; bottom: 25px; } .bmo-pill.p1 { left: 40px; } .bmo-pill.p2 { left: 105px; }
+
+/* Cozy Pastel-Green Chatbot Styling */
+.cute-chat { background-color: #f4fce8 !important; border-radius: 20px !important; border: 2px solid #e0f2c4 !important; padding: 15px !important; }
+.cute-chat .message.user { background-color: #fff9d2 !important; border: 2px solid #fbe490 !important; color: #5a5a5a !important; border-radius: 20px 20px 0 20px !important; font-weight: 500 !important; }
+.cute-chat .message.bot { background-color: #d7f4a5 !important; border: 2px solid #bce27f !important; color: #3b521b !important; border-radius: 20px 20px 20px 0 !important; font-weight: 500 !important; }
 """
 
 bmo_html = f"""
@@ -126,7 +101,8 @@ bmo_html = f"""
     <svg class="bmo-dpad-svg" viewBox="0 0 100 100"><path d="M 35 5 L 65 5 L 65 35 L 95 35 L 95 65 L 65 65 L 65 95 L 35 95 L 35 65 L 5 65 L 5 35 L 35 35 Z" fill="#ffcc00" stroke="#000" stroke-width="4" stroke-linejoin="round"/></svg>
     <svg class="bmo-triangle-svg" viewBox="0 0 100 100"><polygon points="50,10 90,90 10,90" fill="#00ccff" stroke="#000" stroke-width="6" stroke-linejoin="round"/></svg>
     <div class="bmo-gc"></div>
-    <div class="bmo-rc" onclick="window.setBMOState('listening')"></div>
+    <!-- Red Hardware Button JS Bridge -->
+    <div class="bmo-rc" onclick="window.setBMOState('listening');"></div>
     <div class="bmo-pill p1"></div><div class="bmo-pill p2"></div>
 </div>
 <script>
@@ -152,8 +128,8 @@ bmo_html = f"""
 def summarize_turns(old_turns: list, current_summary: str) -> str:
     lines = []
     for turn in old_turns:
-        role = "User" if turn["role"] == "user" else "BMO"
-        lines.append(f"{role}: {turn['content']}")
+        role = "User" if turn.get("role") == "user" else "BMO"
+        lines.append(f"{role}: {turn.get('content', '')}")
     turn_text = " | ".join(lines)
     
     if current_summary:
@@ -167,13 +143,14 @@ def summarize_turns(old_turns: list, current_summary: str) -> str:
 
 def bmo_pipeline(audio_data, history_data):
     if history_data is None:
-        history_data = {"turns": [], "summary": ""}
+        history_data = {"turns": [], "summary": "", "messages": []}
 
     turns = history_data.get("turns", [])
     summary = history_data.get("summary", "")
+    messages = history_data.get("messages", [])
 
     if audio_data is None:
-        return None, "Silence detected.", summary, "idle", history_data
+        return None, messages, summary, "idle", history_data
 
     print("\n[*] Processing incoming audio stream...")
     
@@ -202,9 +179,10 @@ def bmo_pipeline(audio_data, history_data):
     user_text = result.get("text", "").strip()
     if not user_text:
         user_text = "Bonjour !"
-    print(f"  [1/3 Ears] Transcribed (small): \"{user_text}\"")
+    print(f"  [1/3 Ears] Transcribed: \"{user_text}\"")
 
     turns.append({"role": "user", "content": user_text})
+    messages.append({"role": "user", "content": user_text})
 
     # Rolling Memory Summarization: Keep last 4 turns in active window
     SLIDING_WINDOW_SIZE = 4
@@ -212,18 +190,18 @@ def bmo_pipeline(audio_data, history_data):
         old_turns = turns[:-SLIDING_WINDOW_SIZE]
         turns = turns[-SLIDING_WINDOW_SIZE:]
         summary = summarize_turns(old_turns, summary)
-        print(f"  [Memory Engine] Summarized old turns. New Summary: \"{summary}\"")
+        print(f"  [Memory Engine] New Background Summary: \"{summary}\"")
 
     system_prompt_with_summary = BMO_SYSTEM_PROMPT
     if summary:
         system_prompt_with_summary += f"\nBACKGROUND MEMORY: {summary}"
 
-    messages = [{"role": "system", "content": system_prompt_with_summary}] + turns
+    llm_messages = [{"role": "system", "content": system_prompt_with_summary}] + turns
 
     # 2. Brain: Generate Pedagogical Response with Qwen LLM
     if has_llm:
         response = llm.create_chat_completion(
-            messages=messages,
+            messages=llm_messages,
             max_tokens=90
         )
         bmo_text = response["choices"][0]["message"]["content"]
@@ -234,7 +212,9 @@ def bmo_pipeline(audio_data, history_data):
     print(f"  [2/3 Brain] BMO generated: \"{bmo_text}\"")
 
     turns.append({"role": "assistant", "content": bmo_text})
-    history_data = {"turns": turns, "summary": summary}
+    messages.append({"role": "assistant", "content": bmo_text})
+
+    history_data = {"turns": turns, "summary": summary, "messages": messages}
 
     # 3. Voice & DSP: Synthesize French Speech + Pitch Shift (+4.0 semitones for BMO Cartoon Voice)
     print("  [3/3 Voice] Synthesizing French speech...")
@@ -244,7 +224,6 @@ def bmo_pipeline(audio_data, history_data):
         temp_mp3 = "temp_bmo_gtts.mp3"
         tts.save(temp_mp3)
 
-        # Convert audio to numpy array for librosa DSP pitch shift
         import soundfile as sf
         samples_raw, sr_out = sf.read(temp_mp3)
         if samples_raw.ndim > 1:
@@ -262,33 +241,29 @@ def bmo_pipeline(audio_data, history_data):
         tone = np.sin(2 * np.pi * 520 * t) * 0.3
         wav.write(out_wav, sr_out, (tone * 32767).astype(np.int16))
 
-    transcript_display = ""
-    for item in turns:
-        role_label = "User" if item["role"] == "user" else "BMO"
-        transcript_display += f"{role_label}: {item['content']}\n"
-
-    return out_wav, transcript_display.strip(), summary, "speaking", history_data
+    return out_wav, messages, summary, "speaking", history_data
 
 with gr.Blocks() as demo:
-    gr.Markdown("<h1 style='text-align: center;'>🤖 BMO Live Edge Tutor - Integrated System</h1>")
+    gr.Markdown("<h1 style='text-align: center; color: #3b521b;'>🤖 BMO Live Edge Tutor</h1>")
     
-    chat_memory = gr.State({"turns": [], "summary": ""})
+    chat_memory = gr.State({"turns": [], "summary": "", "messages": []})
 
     with gr.Row():
         with gr.Column(scale=1):
             gr.HTML(bmo_html)
         with gr.Column(scale=1):
+            # Cozy Pastel Green Chatbot UI
+            chatbot = gr.Chatbot(type="messages", elem_classes="cute-chat", height=420)
             audio_in = gr.Audio(sources=["microphone"], type="numpy", label="Speak to BMO")
-            audio_out = gr.Audio(label="BMO Response", autoplay=True)
-            txt_log = gr.Textbox(label="Active Sliding Window (Last 4 Turns)", lines=4)
-            txt_summary = gr.Textbox(label="Long-Term Background Memory Summary", lines=3)
+            audio_out = gr.Audio(label="BMO Voice Response", autoplay=True)
+            txt_summary = gr.Textbox(label="Background Memory Summary", lines=2)
             bmo_state = gr.Textbox(visible=False)
             btn = gr.Button("Talk to BMO", variant="primary")
             
             btn.click(
                 fn=bmo_pipeline, 
                 inputs=[audio_in, chat_memory], 
-                outputs=[audio_out, txt_log, txt_summary, bmo_state, chat_memory]
+                outputs=[audio_out, chatbot, txt_summary, bmo_state, chat_memory]
             )
 
     bmo_state.change(
@@ -298,5 +273,5 @@ with gr.Blocks() as demo:
     )
 
 if __name__ == "__main__":
-    print("[*] Launching BMO Dashboard on http://127.0.0.1:7892 ...")
-    demo.launch(server_name="127.0.0.1", server_port=7892)
+    print("[*] Launching Aesthetic Chatbot BMO Dashboard on http://127.0.0.1:7895 ...")
+    demo.launch(server_name="127.0.0.1", server_port=7895)
