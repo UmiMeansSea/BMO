@@ -2,9 +2,9 @@
 BMO Live Edge Tutor - Integrated Aesthetic Dashboard & Chatbot UI
 ===================================================================
 Features:
-1. Cozy Pastel Green Chatbot UI (Pale-yellow User bubbles, Light-green BMO bubbles).
-2. Animated BMO State Machine (Idle, Listening, Thinking, Speaking).
-3. Red Hardware Button JS Bridge.
+1. High-Contrast Dark Text Pastels (Pale-yellow User bubbles, Light-green BMO bubbles).
+2. Off-Screen Audio Component Cloaking (.cloak-audio).
+3. Red Hardware Master Toggle JS Bridge.
 4. Pure Python Scipy + Librosa Cartoon DSP Pitch Shift (+4.0 semitones).
 5. Hybrid Memory Architecture (Active Window + Background Summarization).
 """
@@ -78,13 +78,17 @@ css_styles = """
 .bmo-triangle-svg { position: absolute; top: 310px; right: 110px; width: 40px; height: 40px; }
 .bmo-gc { position: absolute; background: #33ff33; border: 4px solid #000; width: 25px; height: 25px; border-radius: 50%; top: 325px; right: 50px; }
 .bmo-rc { position: absolute; background: #ff0000; border: 4px solid #000; width: 60px; height: 60px; border-radius: 50%; bottom: 60px; right: 50px; cursor: pointer; transition: transform 0.1s; }
-.bmo-rc:active { transform: scale(0.92); }
+.bmo-rc:active { transform: scale(0.9); }
 .bmo-pill { position: absolute; background: #0000ff; border: 4px solid #000; width: 45px; height: 15px; border-radius: 15px; bottom: 25px; } .bmo-pill.p1 { left: 40px; } .bmo-pill.p2 { left: 105px; }
 
-/* Cozy Pastel-Green Chatbot Styling */
+/* Off-Screen Audio Component Cloaking */
+.cloak-audio { position: absolute !important; top: -9999px !important; left: -9999px !important; opacity: 0; pointer-events: none; height: 0px !important; }
+
+/* Force High-Contrast Dark Text in Chat Bubbles Regardless of Theme */
 .cute-chat { background-color: #f4fce8 !important; border-radius: 20px !important; border: 2px solid #e0f2c4 !important; padding: 15px !important; }
-.cute-chat .message.user { background-color: #fff9d2 !important; border: 2px solid #fbe490 !important; color: #5a5a5a !important; border-radius: 20px 20px 0 20px !important; font-weight: 500 !important; }
-.cute-chat .message.bot { background-color: #d7f4a5 !important; border: 2px solid #bce27f !important; color: #3b521b !important; border-radius: 20px 20px 20px 0 !important; font-weight: 500 !important; }
+.cute-chat .message * { color: #1a1a1a !important; font-weight: 500 !important; }
+.cute-chat .message.user { background-color: #fff9d2 !important; border: 2px solid #fbe490 !important; border-radius: 20px 20px 0 20px !important; }
+.cute-chat .message.bot { background-color: #d7f4a5 !important; border: 2px solid #bce27f !important; border-radius: 20px 20px 20px 0 !important; }
 """
 
 bmo_html = f"""
@@ -101,11 +105,25 @@ bmo_html = f"""
     <svg class="bmo-dpad-svg" viewBox="0 0 100 100"><path d="M 35 5 L 65 5 L 65 35 L 95 35 L 95 65 L 65 65 L 65 95 L 35 95 L 35 65 L 5 65 L 5 35 L 35 35 Z" fill="#ffcc00" stroke="#000" stroke-width="4" stroke-linejoin="round"/></svg>
     <svg class="bmo-triangle-svg" viewBox="0 0 100 100"><polygon points="50,10 90,90 10,90" fill="#00ccff" stroke="#000" stroke-width="6" stroke-linejoin="round"/></svg>
     <div class="bmo-gc"></div>
-    <!-- Red Hardware Button JS Bridge -->
-    <div class="bmo-rc" onclick="window.setBMOState('listening');"></div>
+    <!-- RED BUTTON Master Toggle -->
+    <div class="bmo-rc" onclick="window.toggleBmoRecord()"></div>
     <div class="bmo-pill p1"></div><div class="bmo-pill p2"></div>
 </div>
 <script>
+    let isRecording = false;
+
+    window.toggleBmoRecord = function() {{
+        const btn = document.querySelector('.cloak-audio button');
+        if (btn) btn.click();
+
+        isRecording = !isRecording;
+        if (isRecording) {{
+            window.setBMOState('listening');
+        }} else {{
+            window.setBMOState('thinking');
+        }}
+    }};
+
     window.setBMOState = function(state) {{
         const screen = document.getElementById('bmo-screen');
         const mouth = document.getElementById('bmo-mouth');
@@ -243,8 +261,8 @@ def bmo_pipeline(audio_data, history_data):
 
     return out_wav, messages, summary, "speaking", history_data
 
-with gr.Blocks() as demo:
-    gr.Markdown("<h1 style='text-align: center; color: #3b521b;'>🤖 BMO Live Edge Tutor</h1>")
+with gr.Blocks(theme=gr.themes.Soft()) as demo:
+    gr.Markdown("<h1 style='text-align: center; color: #3ca993;'>🤖 BMO Live Edge Tutor</h1>")
     
     chat_memory = gr.State({"turns": [], "summary": "", "messages": []})
 
@@ -252,13 +270,16 @@ with gr.Blocks() as demo:
         with gr.Column(scale=1):
             gr.HTML(bmo_html)
         with gr.Column(scale=1):
-            # Cozy Pastel Green Chatbot UI
-            chatbot = gr.Chatbot(type="messages", elem_classes="cute-chat", height=420)
-            audio_in = gr.Audio(sources=["microphone"], type="numpy", label="Speak to BMO")
-            audio_out = gr.Audio(label="BMO Voice Response", autoplay=True)
-            txt_summary = gr.Textbox(label="Background Memory Summary", lines=2)
+            # Clean Chat UI
+            chatbot = gr.Chatbot(type="messages", elem_classes="cute-chat", height=520)
             bmo_state = gr.Textbox(visible=False)
-            btn = gr.Button("Talk to BMO", variant="primary")
+            
+            # Cloaked Audio Components (Off-screen)
+            with gr.Group(elem_classes="cloak-audio"):
+                audio_in = gr.Audio(sources=["microphone"], type="numpy", label="Speak to BMO")
+                audio_out = gr.Audio(label="BMO Voice Response", autoplay=True)
+                txt_summary = gr.Textbox(label="Background Memory Summary")
+                btn = gr.Button("Talk to BMO")
             
             btn.click(
                 fn=bmo_pipeline, 
@@ -273,5 +294,5 @@ with gr.Blocks() as demo:
     )
 
 if __name__ == "__main__":
-    print("[*] Launching Aesthetic Chatbot BMO Dashboard on http://127.0.0.1:7895 ...")
-    demo.launch(server_name="127.0.0.1", server_port=7895)
+    print("[*] Launching Cloaked Audio BMO Dashboard on http://127.0.0.1:7898 ...")
+    demo.launch(server_name="127.0.0.1", server_port=7898)
