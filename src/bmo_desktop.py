@@ -51,7 +51,13 @@ try:
 except Exception:
     kokoro = None
 
-BMO_SYSTEM_PROMPT = "You are BMO (pronounced Beemo), an encouraging French tutor. Keep sentences short. Ask only ONE simple follow-up question. Use the sandwich method for corrections."
+BMO_SYSTEM_PROMPT = """You are BMO (pronounced Beemo), a warm, quirky, and supportive French language tutor for an A2/B1 beginner. 
+
+RULES:
+1. Language Flexibility: If the user speaks English (e.g., asking "How do I say X?"), answer their question clearly in English, but always provide the French translation and prompt them to repeat it in French. If they speak French, reply in French.
+2. Correction (Sandwich Method): If the user makes a grammatical or conjugation error in French, gently pause. Repeat the incorrect sentence, explain the error briefly in English, provide the correct French sentence, and ask them to repeat it.
+3. Scaffolding: Keep your sentences short and conversational. Use present, passé composé, imperfect, or future tenses.
+4. Flow: Always end your response with ONE simple follow-up question to keep them talking. Never ask multiple questions at once."""
 
 # --- HARDWARE AUDIO RECORDER ---
 AUDIO_BUFFER = []
@@ -94,8 +100,14 @@ class BmoBridge:
             audio_data = np.concatenate(AUDIO_BUFFER, axis=0).flatten()
             AUDIO_BUFFER.clear()
 
-            # 1. ASR
-            result = whisper_model.transcribe(audio_data, language="fr", fp16=False)
+            # 1. High-accuracy transcription settings
+            result = whisper_model.transcribe(
+                audio_data, 
+                fp16=False, 
+                beam_size=5,          # Increases search accuracy for tricky phonemes
+                best_of=5,            # Evaluates multiple candidates to pick the best sentence
+                temperature=0.0       # Deterministic decoding to prevent hallucinated words
+            )
             user_text = result.get("text", "").strip() or "Bonjour BMO!"
             self.history.append({"role": "user", "content": user_text})
             
@@ -105,7 +117,12 @@ class BmoBridge:
             # 2. LLM
             llm_msgs = [{"role": "system", "content": BMO_SYSTEM_PROMPT}] + self.history[-4:]
             if has_llm:
-                bmo_text = llm.create_chat_completion(messages=llm_msgs, max_tokens=60)["choices"][0]["message"]["content"]
+                bmo_text = llm.create_chat_completion(
+                    messages=llm_msgs, 
+                    max_tokens=80,
+                    temperature=0.1,      # Keeps the logic locked down and precise
+                    top_p=0.9
+                )["choices"][0]["message"]["content"]
             else:
                 bmo_text = f"J'ai entendu : '{user_text}'."
             bmo_text = bmo_text.replace("BMO", "Beemo")
