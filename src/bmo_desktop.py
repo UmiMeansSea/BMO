@@ -382,11 +382,46 @@ def classify_user_intent(user_text):
             return label, instruction
     return "GENERAL", "Réagis au contenu de ce que dit l'étudiant et pose une nouvelle question pour faire avancer la conversation."
 
-# --- PYTHON-SIDE FRENCH GRAMMAR CORRECTION ENGINE (PRE-LLM) ---
+# --- NON-NATIVE ACCENT & PHONETIC NORMALIZER ---
+def normalize_non_native_phonetics(text: str) -> str:
+    """Normalizes common non-native phonetic mispronunciations in transcribed audio."""
+    if not text:
+        return ""
+    phonetic_map = [
+        (r"\bbonjo[oo]r\b", "bonjour"),
+        (r"\bbonjoer\b", "bonjour"),
+        (r"\bbo[kk]oo?\b", "beaucoup"),
+        (r"\bbocu\b", "beaucoup"),
+        (r"\bmerci\s+bo[kk]ou?\b", "merci beaucoup"),
+        (r"\bparla[ys]\b", "parlez"),
+        (r"\bsil?\s+vous?\s+pla[te|t]\b", "s'il vous plaît"),
+        (r"\bj['\s]?mapelle\b", "je m'appelle"),
+        (r"\bjampelle\b", "je m'appelle"),
+        (r"\bdesulé\b", "désolé"),
+        (r"\bsuer\s+fatigue\b", "suis fatigué"),
+        (r"\bje\s+suer\b", "je suis"),
+        (r"\bcoment\b", "comment"),
+        (r"\bcommen\b", "comment"),
+        (r"\bca\s+va\b", "ça va"),
+        (r"\bse\s+va\b", "ça va"),
+    ]
+    normalized = text
+    for pattern, replacement in phonetic_map:
+        normalized = re.sub(pattern, replacement, normalized, flags=re.IGNORECASE)
+    return normalized
+
+# --- PYTHON-SIDE FRENCH GRAMMAR & PRONUNCIATION ENGINE (PRE-LLM) ---
 def detect_french_grammar_errors(user_text):
-    """Detects common A2/B1 French grammar errors via regex. Returns correction instruction or None."""
+    """Detects common A2/B1 French grammar and non-native pronunciation errors via regex."""
     lower = user_text.lower().strip()
     grammar_rules = [
+        # Pronunciation & Phonetic corrections for non-EU/beginner accents
+        (r"\bbonjo[oo]r\b", "bonjour", "prononciation du son 'ou' dans bonjour (prononcé 'bon-zhoor')"),
+        (r"\bbo[kk]o[uk]?\b", "beaucoup", "prononciation du son 'eau-coup' (prononcé 'boh-koo')"),
+        (r"\bsuer\s+fatigue\b", "suis fatigué", "prononciation de 'je suis fatigué' (prononcé 'zhuh swee fah-tee-gay')"),
+        (r"\bparlays\b", "parlez", "prononciation de la terminaison '-ez' (prononcé 'ay')"),
+        
+        # Grammar & Tense corrections
         (r"\bje\s+va\b", "je vais", "conjugaison du verbe 'aller' au présent : je vais, tu vas, il va"),
         (r"\bj'avais\s+bien\b", "je vais bien", "confusion de temps : 'j'avais' est l'imparfait, il faut utiliser le présent 'je vais bien'"),
         (r"\bje\s+suis\s+allé\s+à\s+le\b", "je suis allé au", "contraction obligatoire : à + le = au"),
@@ -406,7 +441,7 @@ def detect_french_grammar_errors(user_text):
         if match:
             original = match.group(0)
             if correction:
-                return f"CORRECTION REQUISE: L'étudiant a dit \"{original}\". La forme correcte est \"{correction}\" ({explanation}). Tu DOIS corriger cette erreur avec la Méthode du Sandwich : 1) félicite l'effort, 2) explique la correction, 3) dis 'Répète après moi : <phrase corrigée>'."
+                return f"CORRECTION REQUISE: L'étudiant a dit/prononcé \"{original}\". La forme/prononciation correcte est \"{correction}\" ({explanation}). Tu DOIS corriger cette erreur avec la Méthode du Sandwich : 1) félicite l'effort, 2) explique la correction/prononciation, 3) dis 'Répète après moi : <phrase corrigée>'."
             else:
                 return f"CORRECTION REQUISE: L'étudiant a fait une erreur — {explanation}. Tu DOIS corriger cette erreur avec la Méthode du Sandwich."
     return None
@@ -578,7 +613,7 @@ class BmoBridge:
                 result = whisper_model.transcribe(
                     audio_data, 
                     fp16=False, 
-                    initial_prompt="Le nom du robot est BMO (prononcé Beemo). Dialogue en français.",
+                    initial_prompt="Le nom du robot est BMO (prononcé Beemo). Dialogue en français parlé par un étudiant débutant non-natif avec un accent étranger.",
                     beam_size=1,
                     best_of=1,
                     temperature=0.0,
@@ -586,7 +621,8 @@ class BmoBridge:
                 )
                 raw_text = result.get("text", "").strip()
                 raw_text = clean_hallucinated_text(raw_text)
-                user_text = normalize_bmo_name(raw_text)
+                phonetic_clean = normalize_non_native_phonetics(raw_text)
+                user_text = normalize_bmo_name(phonetic_clean)
 
             if not raw_text or len(user_text.strip()) < 2:
                 user_text = "(Parole non détectée)"
