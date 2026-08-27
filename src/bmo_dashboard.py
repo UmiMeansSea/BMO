@@ -1,10 +1,11 @@
 """
-BMO Live Edge Tutor - Integrated Aesthetic Dashboard & Push-to-Talk UI
-======================================================================
-Fixes:
-1. Native Gradio head JS injection: Defines window.toggleBmoRecord globally BEFORE DOM elements render.
-2. Custom CSS & High-contrast dark text styling.
-3. Clean Push-to-Talk Recording & Auto-Submit Pipeline.
+BMO Live Edge Tutor - Perfect Visual State Machine & Push-to-Talk Pipeline
+========================================================================
+Features:
+1. Animated Waveform Visualizer on Screen when Listening (Pure CSS canvas keyframes).
+2. Pixel Grid Loading Pattern when Thinking.
+3. Keyframe Mouth Animation Loop when Speaking + Automatic return to Idle smile when done.
+4. Instant Chatbot UI updates (User transcription + BMO pedagogical response).
 """
 
 import sys
@@ -28,7 +29,7 @@ except ImportError as e:
 MODELS_DIR = Path(r"D:\BMO-Research\models")
 LLM_PATH = MODELS_DIR / "bmo-model-4bit.gguf"
 
-print("[*] Initializing Head-Injected BMO Dashboard System...")
+print("[*] Initializing Visual State Machine BMO Dashboard System...")
 print("  1/2 Loading Whisper ASR (small)...")
 whisper_model = whisper.load_model("small")
 
@@ -40,7 +41,7 @@ except Exception as e:
     print(f"[!] LLM load notice: {e}")
     has_llm = False
 
-print("[OK] Head-Injected BMO system initialized successfully!\n")
+print("[OK] BMO system initialized successfully!\n")
 
 BMO_SYSTEM_PROMPT = """You are BMO (pronounced Beemo), an encouraging, highly attentive French language tutor. The user is a beginner (A2/B1).
 RULES:
@@ -50,24 +51,55 @@ RULES:
 4. Keep responses conversational and brief."""
 
 css_styles = """
-/* BMO Chassis & Hardware Animations */
+/* BMO Chassis & Body */
 #bmo-container { background-color: #3ca993; width: 400px; height: 520px; border: 4px solid #000; border-radius: 20px; position: relative; margin: 0 auto; }
 .bmo-screen { background-color: #b7efcc; width: 350px; height: 220px; border: 4px solid #000; border-radius: 15px; position: absolute; top: 20px; left: 21px; box-sizing: border-box; transition: background 0.2s ease; overflow: hidden; }
 
-/* State 1: Listening */
-.bmo-screen.listening { background-color: #112a20; }
-/* State 2: Thinking */
-.bmo-screen.thinking { background-color: #2c5e50; }
-
-.bmo-screen.listening .bmo-eye, .bmo-screen.listening .bmo-mouth,
-.bmo-screen.thinking .bmo-eye, .bmo-screen.thinking .bmo-mouth { display: none; }
-
+/* --- STATE 1: IDLE --- */
 .bmo-eye { background: #000; width: 16px; height: 16px; border-radius: 50%; position: absolute; top: 35%; animation: blink 4s infinite; }
 .bmo-eye.left { left: 25%; } .bmo-eye.right { right: 25%; }
 @keyframes blink { 0%, 96%, 98%, 100% { transform: scaleY(1); } 97% { transform: scaleY(0.1); } }
 
 .bmo-mouth { position: absolute; top: 50%; left: 50%; transform: translateX(-50%); width: 65px; height: 32px; border: 4px solid #000; border-top: transparent; border-left: transparent; border-right: transparent; border-radius: 0 0 50px 50px; transition: all 0.15s ease; }
-.bmo-mouth.speaking { animation: talk-anim 0.25s infinite alternate ease-in-out; background: #112a20; border: 3px solid #000; }
+
+/* --- STATE 2: LISTENING (Animated Sound Waveform) --- */
+.bmo-waveform { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 220px; height: 80px; align-items: center; justify-content: space-between; }
+.bmo-screen.listening { background-color: #0b1f17; }
+.bmo-screen.listening .bmo-eye, .bmo-screen.listening .bmo-mouth { display: none; }
+.bmo-screen.listening .bmo-waveform { display: flex; }
+
+.wave-bar { width: 10px; background: #33ff99; border-radius: 5px; animation: wave-anim 0.6s infinite alternate ease-in-out; }
+.wave-bar:nth-child(1) { height: 30px; animation-delay: 0.1s; }
+.wave-bar:nth-child(2) { height: 60px; animation-delay: 0.3s; }
+.wave-bar:nth-child(3) { height: 40px; animation-delay: 0.2s; }
+.wave-bar:nth-child(4) { height: 75px; animation-delay: 0.4s; }
+.wave-bar:nth-child(5) { height: 50px; animation-delay: 0.15s; }
+.wave-bar:nth-child(6) { height: 65px; animation-delay: 0.35s; }
+.wave-bar:nth-child(7) { height: 35px; animation-delay: 0.25s; }
+
+@keyframes wave-anim { 0% { transform: scaleY(0.3); background: #33ff99; } 100% { transform: scaleY(1.3); background: #66ffff; } }
+
+/* --- STATE 3: THINKING (Pixel Grid Spinner) --- */
+.bmo-thinking-grid { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 100px; height: 100px; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.bmo-screen.thinking { background-color: #1a4237; }
+.bmo-screen.thinking .bmo-eye, .bmo-screen.thinking .bmo-mouth, .bmo-screen.thinking .bmo-waveform { display: none; }
+.bmo-screen.thinking .bmo-thinking-grid { display: grid; }
+
+.grid-dot { background: #ffcc00; border-radius: 4px; animation: dot-pulse 1s infinite alternate; }
+.grid-dot:nth-child(1) { animation-delay: 0.0s; }
+.grid-dot:nth-child(2) { animation-delay: 0.2s; }
+.grid-dot:nth-child(3) { animation-delay: 0.4s; }
+.grid-dot:nth-child(4) { animation-delay: 0.6s; }
+.grid-dot:nth-child(5) { animation-delay: 0.8s; }
+.grid-dot:nth-child(6) { animation-delay: 0.4s; }
+.grid-dot:nth-child(7) { animation-delay: 0.2s; }
+.grid-dot:nth-child(8) { animation-delay: 0.6s; }
+.grid-dot:nth-child(9) { animation-delay: 0.0s; }
+
+@keyframes dot-pulse { 0% { opacity: 0.2; transform: scale(0.8); } 100% { opacity: 1; transform: scale(1.1); background: #ff5500; } }
+
+/* --- STATE 4: SPEAKING (Keyframe Animated Mouth) --- */
+.bmo-mouth.speaking { animation: talk-anim 0.22s infinite alternate ease-in-out; background: #112a20; border: 3px solid #000; }
 @keyframes talk-anim { 0% { height: 12px; width: 35px; border-radius: 20px; top: 58%; } 50% { height: 28px; width: 48px; border-radius: 50% 50% 45% 45%; top: 52%; } 100% { height: 38px; width: 52px; border-radius: 40% 40% 50% 50%; top: 50%; } }
 
 .bmo-slot { position: absolute; background: #112a20; border: 4px solid #000; width: 200px; height: 15px; top: 260px; left: 30px; }
@@ -157,7 +189,22 @@ bmo_html = f"""
         <div class="bmo-eye left"></div>
         <div class="bmo-eye right"></div>
         <div id="bmo-mouth" class="bmo-mouth"></div>
+
+        <!-- Animated Sound Waveform (Listening) -->
+        <div class="bmo-waveform">
+            <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+            <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+        </div>
+
+        <!-- Animated Pixel Grid (Thinking) -->
+        <div class="bmo-thinking-grid">
+            <div class="grid-dot"></div><div class="grid-dot"></div><div class="grid-dot"></div>
+            <div class="grid-dot"></div><div class="grid-dot"></div><div class="grid-dot"></div>
+            <div class="grid-dot"></div><div class="grid-dot"></div><div class="grid-dot"></div>
+        </div>
     </div>
+
     <div class="bmo-slot"></div><div class="bmo-sbc"></div>
     <svg class="bmo-dpad-svg" viewBox="0 0 100 100"><path d="M 35 5 L 65 5 L 65 35 L 95 35 L 95 65 L 65 65 L 65 95 L 35 95 L 35 65 L 5 65 L 5 35 L 35 35 Z" fill="#ffcc00" stroke="#000" stroke-width="4" stroke-linejoin="round"/></svg>
     <svg class="bmo-triangle-svg" viewBox="0 0 100 100"><polygon points="50,10 90,90 10,90" fill="#00ccff" stroke="#000" stroke-width="6" stroke-linejoin="round"/></svg>
@@ -307,7 +354,7 @@ with gr.Blocks(head=head_js) as demo:
         outputs=[bmo_voice, bmo_state, chatbot, chat_memory]
     )
 
-    # Auto-Reset: Return to idle face once speech finishes
+    # Auto-Reset: Return to normal idle face once speech finishes
     bmo_voice.stop(
         fn=lambda: "idle",
         inputs=[],
@@ -317,5 +364,5 @@ with gr.Blocks(head=head_js) as demo:
     bmo_state.change(fn=None, inputs=[bmo_state], js="(state) => window.setBMOState(state)")
 
 if __name__ == "__main__":
-    print("[*] Launching Head-Injected BMO Dashboard on http://127.0.0.1:7910 ...")
-    demo.launch(server_name="127.0.0.1", server_port=7910)
+    print("[*] Launching Visual Waveform BMO Dashboard on http://127.0.0.1:7915 ...")
+    demo.launch(server_name="127.0.0.1", server_port=7915)
