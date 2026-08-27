@@ -142,7 +142,10 @@ head_js = """
         if (!micContainer) return;
 
         if (!window.isBmoRecording) {
-            const recordBtn = micContainer.querySelector('button[aria-label="Record"]') || micContainer.querySelector('button');
+            // Fuzzy search for any button containing "Record" or "record" in its aria-label
+            const recordBtn = micContainer.querySelector('button[aria-label*="Record"]') || 
+                              micContainer.querySelector('button[aria-label*="record"]') || 
+                              micContainer.querySelector('button');
             if (recordBtn) {
                 window.bmoLog('Clicking RECORD button...');
                 recordBtn.click();
@@ -151,13 +154,16 @@ head_js = """
                 window.setBMOState('listening');
             }
         } else {
-            const stopBtn = micContainer.querySelector('button[aria-label="Stop"]') || micContainer.querySelector('button');
+            // Fuzzy search for any button containing "Stop" or "stop"
+            const stopBtn = micContainer.querySelector('button[aria-label*="Stop"]') || 
+                            micContainer.querySelector('button[aria-label*="stop"]') || 
+                            micContainer.querySelector('button');
             if (stopBtn) {
                 window.bmoLog('Clicking STOP button...');
                 stopBtn.click();
                 window.isBmoRecording = false;
                 window.playBmoBeep(440);
-                window.setBMOProgress(20, 'System: Triggering Pipeline...');
+                window.setBMOProgress(20, 'System: Uploading Audio...');
                 window.setBMOState('thinking');
             }
         }
@@ -347,8 +353,8 @@ with gr.Blocks(head=head_js) as demo:
                 audio_input = gr.Audio(sources=["microphone"], type="numpy", elem_id="bmo-mic")
                 bmo_voice = gr.Audio(autoplay=True)
 
-    # Bulletproof .change() event listener: fires instantly when numpy audio data populates
-    audio_input.change(
+    # Use the native stop_recording event so it only fires when audio is completely finalized
+    audio_input.stop_recording(
         fn=bmo_response_generator,
         inputs=[audio_input, chat_memory],
         outputs=[bmo_voice, bmo_state, chatbot, chat_memory]
