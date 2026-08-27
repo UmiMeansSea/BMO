@@ -347,17 +347,18 @@ with gr.Blocks(head=head_js) as demo:
                 audio_input = gr.Audio(sources=["microphone"], type="numpy", elem_id="bmo-mic")
                 bmo_voice = gr.Audio(autoplay=True)
 
-    # FIXED: Only use stop_recording to prevent double-firing race conditions.
-    audio_input.stop_recording(
+    # Bulletproof .change() event listener: fires instantly when numpy audio data populates
+    audio_input.change(
         fn=bmo_response_generator,
         inputs=[audio_input, chat_memory],
         outputs=[bmo_voice, bmo_state, chatbot, chat_memory]
     )
 
+    # Reset both state AND clear audio_input on voice stop so next prompt is ready
     bmo_voice.stop(
-        fn=lambda: "idle:0:Ready",
+        fn=lambda: (None, "idle:0:Ready"),
         inputs=[],
-        outputs=[bmo_state]
+        outputs=[audio_input, bmo_state]
     )
 
     bmo_state.change(
