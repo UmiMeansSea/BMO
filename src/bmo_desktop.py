@@ -113,24 +113,27 @@ class BmoBridge:
             self.history.append({"role": "assistant", "content": bmo_text})
             window.evaluate_js(f"window.appendChatMessage('bot', {repr(bmo_text)});")
 
-            # 3. TTS & Native Playback
+            # 3. TTS & Native Playback (Slowed Down for Beginners)
             window.evaluate_js("window.setBMOState('speaking');")
             if kokoro:
                 try:
-                    audio, sr_out = kokoro.create(bmo_text, voice="ff_siwis", speed=1.15, lang="fr-fr")
+                    # Slowed speed from 1.15 to 0.75 for clear, beginner-friendly articulation
+                    audio, sr_out = kokoro.create(bmo_text, voice="ff_siwis", speed=0.75, lang="fr-fr")
                 except Exception:
-                    audio, sr_out = kokoro.create(bmo_text, voice="af_bella", speed=1.15)
+                    audio, sr_out = kokoro.create(bmo_text, voice="af_bella", speed=0.75)
                 
                 audio_flat = audio.squeeze()
+                
+                # Retain the exact same high-pitched cartoon character profile
                 pitch_factor = 1.2599
                 new_len = int(len(audio_flat) / pitch_factor)
                 samples_shifted = scipy.signal.resample(audio_flat, new_len).astype(np.float32)
                 
                 sd.play(samples_shifted, sr_out)
-                sd.wait() # Wait until speech finishes completely
+                sd.wait() # Wait until the slow, clear speech finishes completely
             else:
                 from gtts import gTTS
-                tts = gTTS(text=bmo_text, lang='fr', slow=False)
+                tts = gTTS(text=bmo_text, lang='fr', slow=True)
                 tts.save("temp_bmo_gtts.mp3")
                 import soundfile as sf
                 samples_raw, sr_out = sf.read("temp_bmo_gtts.mp3")
