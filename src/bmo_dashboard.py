@@ -1,11 +1,10 @@
 """
-BMO Live Edge Tutor - Push-to-Talk Aesthetic Dashboard
-======================================================
-1. Push-to-Talk Hardware JS Bridge with Audio Cues (High start beep, Low stop beep).
-2. Deep CSS Pastel Overrides for Dark Mode Neutralization.
-3. Native gr.Audio stop_recording auto-submit pipeline.
-4. Pure Python Scipy + Librosa Cartoon DSP Pitch Shift (+4.0 semitones).
-5. Hybrid Memory Architecture (Active Window + Background Summarization).
+BMO Live Edge Tutor - Integrated Aesthetic Dashboard & Push-to-Talk UI
+======================================================================
+Fixes:
+1. JavaScript Window Scope: Explicit window.toggleBmoRecord = function() definition inside <script>.
+2. Hardware Push-to-Talk JS Bridge with Web Audio Bleeps (880 Hz start, 440 Hz stop).
+3. Dark Mode Neutralization & Cloaked Audio Engine.
 """
 
 import sys
@@ -29,7 +28,7 @@ except ImportError as e:
 MODELS_DIR = Path(r"D:\BMO-Research\models")
 LLM_PATH = MODELS_DIR / "bmo-model-4bit.gguf"
 
-print("[*] Initializing Push-to-Talk BMO Dashboard System...")
+print("[*] Initializing Fixed Push-to-Talk BMO Dashboard System...")
 print("  1/2 Loading Whisper ASR (small)...")
 whisper_model = whisper.load_model("small")
 
@@ -41,7 +40,7 @@ except Exception as e:
     print(f"[!] LLM load notice: {e}")
     has_llm = False
 
-print("[OK] Push-to-Talk BMO system initialized successfully!\n")
+print("[OK] Fixed Push-to-Talk BMO system initialized successfully!\n")
 
 BMO_SYSTEM_PROMPT = """You are BMO (pronounced Beemo), an encouraging, highly attentive French language tutor. The user is a beginner (A2/B1).
 RULES:
@@ -51,7 +50,7 @@ RULES:
 4. Keep responses conversational and brief."""
 
 css_styles = """
-/* BMO Chassis & Animations */
+/* BMO Chassis & Hardware Animations */
 #bmo-container { background-color: #3ca993; width: 400px; height: 520px; border: 4px solid #000; border-radius: 20px; position: relative; margin: 0 auto; }
 .bmo-screen { background-color: #b7efcc; width: 350px; height: 220px; border: 4px solid #000; border-radius: 15px; position: absolute; top: 20px; left: 21px; box-sizing: border-box; transition: background 0.2s ease; overflow: hidden; }
 
@@ -107,39 +106,41 @@ bmo_html = f"""
     <div class="bmo-pill p1"></div><div class="bmo-pill p2"></div>
 </div>
 <script>
-    let isRecording = false;
+    window.isBmoRecording = false;
 
-    function playBeep(freq, type) {{
+    window.playBmoBeep = function(freq) {{
         try {{
             const ctx = new (window.AudioContext || window.webkitAudioContext)();
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
-            osc.type = type;
+            osc.type = 'sine';
             osc.frequency.setValueAtTime(freq, ctx.currentTime);
             gain.gain.setValueAtTime(0.1, ctx.currentTime);
-            osc.connect(gain); gain.connect(ctx.destination);
-            osc.start(); osc.stop(ctx.currentTime + 0.15);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.15);
         }} catch(e) {{}}
-    }}
+    }};
 
     window.toggleBmoRecord = function() {{
         const micContainer = document.getElementById('bmo-mic');
         if (!micContainer) return;
 
-        if (!isRecording) {{
+        if (!window.isBmoRecording) {{
             const recordBtn = micContainer.querySelector('button[aria-label="Record"]') || micContainer.querySelector('button');
             if (recordBtn) {{
                 recordBtn.click();
-                isRecording = true;
-                playBeep(880, 'sine'); // High start beep
+                window.isBmoRecording = true;
+                window.playBmoBeep(880);
                 window.setBMOState('listening');
             }}
         }} else {{
             const stopBtn = micContainer.querySelector('button[aria-label="Stop"]') || micContainer.querySelector('button');
             if (stopBtn) {{
                 stopBtn.click();
-                isRecording = false;
-                playBeep(440, 'sine'); // Low stop beep
+                window.isBmoRecording = false;
+                window.playBmoBeep(440);
                 window.setBMOState('thinking');
             }}
         }}
@@ -313,5 +314,5 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
     bmo_state.change(fn=None, inputs=[bmo_state], js="(state) => window.setBMOState(state)")
 
 if __name__ == "__main__":
-    print("[*] Launching Push-to-Talk BMO Dashboard on http://127.0.0.1:7900 ...")
-    demo.launch(server_name="127.0.0.1", server_port=7900)
+    print("[*] Launching Fixed Push-to-Talk BMO Dashboard on http://127.0.0.1:7905 ...")
+    demo.launch(server_name="127.0.0.1", server_port=7905)
