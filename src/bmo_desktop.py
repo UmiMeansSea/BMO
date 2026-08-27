@@ -1061,4 +1061,4 @@ function appendChatMessage(sender, text, translation = '') {
 
 if __name__ == "__main__":
     window = webview.create_window("BMO Live Edge Tutor", html=html_content, js_api=bridge, width=860, height=600, background_color='#122821')
-    webview.start()
+    webview.start(debug=True)
