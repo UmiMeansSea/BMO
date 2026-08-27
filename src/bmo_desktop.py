@@ -43,7 +43,7 @@ print(f"[*] Initializing BMO Native Desktop Engine using models from: {MODELS_DI
 whisper_model = whisper.load_model("small")
 
 try:
-    llm = Llama(model_path=str(LLM_PATH), n_ctx=512, n_threads=4, verbose=False)
+    llm = Llama(model_path=str(LLM_PATH), n_ctx=768, n_threads=4, verbose=False)
     has_llm = True
 except Exception:
     has_llm = False
@@ -416,34 +416,34 @@ def detect_french_grammar_errors(user_text):
     lower = user_text.lower().strip()
     grammar_rules = [
         # Pronunciation & Phonetic corrections for non-EU/beginner accents
-        (r"\bbonjo[oo]r\b", "bonjour", "prononciation du son 'ou' dans bonjour (prononcé 'bon-zhoor')"),
-        (r"\bbo[kk]o[uk]?\b", "beaucoup", "prononciation du son 'eau-coup' (prononcé 'boh-koo')"),
-        (r"\bsuer\s+fatigue\b", "suis fatigué", "prononciation de 'je suis fatigué' (prononcé 'zhuh swee fah-tee-gay')"),
-        (r"\bparlays\b", "parlez", "prononciation de la terminaison '-ez' (prononcé 'ay')"),
+        (r"\bbonjo[oo]r\b", "bonjour", "prononciation du son 'ou' dans bonjour"),
+        (r"\bbo[kk]o[uk]?\b", "beaucoup", "prononciation du son 'eau-coup'"),
+        (r"\bsuer\s+fatigue\b", "suis fatigué", "prononciation de 'je suis fatigué'"),
+        (r"\bparlays\b", "parlez", "prononciation de la terminaison '-ez'"),
         
         # Grammar & Tense corrections
-        (r"\bje\s+va\b", "je vais", "conjugaison du verbe 'aller' au présent : je vais, tu vas, il va"),
-        (r"\bj'avais\s+bien\b", "je vais bien", "confusion de temps : 'j'avais' est l'imparfait, il faut utiliser le présent 'je vais bien'"),
-        (r"\bje\s+suis\s+allé\s+à\s+le\b", "je suis allé au", "contraction obligatoire : à + le = au"),
-        (r"\bà\s+le\s", "au ", "contraction obligatoire : à + le = au"),
-        (r"\bde\s+le\s", "du ", "contraction obligatoire : de + le = du"),
-        (r"\bje\s+(?:mange|parle|travaille|joue|aime|regarde|écoute|habite|danse|chante)\s+pas\b", None, "négation incomplète : il manque 'ne' → 'je ne ... pas'"),
-        (r"\bil\s+a\s+manger\b", "il a mangé", "confusion infinitif/participe passé : après 'avoir', on utilise le participe passé 'mangé'"),
-        (r"\bil\s+a\s+parler\b", "il a parlé", "confusion infinitif/participe passé : après 'avoir', on utilise le participe passé 'parlé'"),
-        (r"\bil\s+a\s+travailler\b", "il a travaillé", "confusion infinitif/participe passé : après 'avoir', on utilise le participe passé 'travaillé'"),
-        (r"\bje\s+est\b", "je suis", "conjugaison du verbe 'être' : je suis (pas 'je est')"),
-        (r"\btu\s+est\b", "tu es", "conjugaison du verbe 'être' : tu es (pas 'tu est')"),
-        (r"\bje\s+a\b", "j'ai", "conjugaison du verbe 'avoir' : j'ai (pas 'je a')"),
-        (r"\btu\s+a\b", "tu as", "conjugaison du verbe 'avoir' : tu as (pas 'tu a')"),
+        (r"\bje\s+va\b", "je vais", "conjugaison 'aller' présent : je vais"),
+        (r"\bj'avais\s+bien\b", "je vais bien", "temps : utiliser le présent 'je vais bien'"),
+        (r"\bje\s+suis\s+allé\s+à\s+le\b", "je suis allé au", "contraction à+le=au"),
+        (r"\bà\s+le\s", "au ", "contraction à+le=au"),
+        (r"\bde\s+le\s", "du ", "contraction de+le=du"),
+        (r"\bje\s+(?:mange|parle|travaille|joue|aime|regarde|écoute|habite|danse|chante)\s+pas\b", None, "négation : il manque 'ne'"),
+        (r"\bil\s+a\s+manger\b", "il a mangé", "participe passé après 'avoir' : mangé"),
+        (r"\bil\s+a\s+parler\b", "il a parlé", "participe passé après 'avoir' : parlé"),
+        (r"\bil\s+a\s+travailler\b", "il a travaillé", "participe passé après 'avoir' : travaillé"),
+        (r"\bje\s+est\b", "je suis", "verbe 'être' : je suis"),
+        (r"\btu\s+est\b", "tu es", "verbe 'être' : tu es"),
+        (r"\bje\s+a\b", "j'ai", "verbe 'avoir' : j'ai"),
+        (r"\btu\s+a\b", "tu as", "verbe 'avoir' : tu as"),
     ]
     for pattern, correction, explanation in grammar_rules:
         match = re.search(pattern, lower)
         if match:
             original = match.group(0)
             if correction:
-                return f"CORRECTION REQUISE: L'étudiant a dit/prononcé \"{original}\". La forme/prononciation correcte est \"{correction}\" ({explanation}). Tu DOIS corriger cette erreur avec la Méthode du Sandwich : 1) félicite l'effort, 2) explique la correction/prononciation, 3) dis 'Répète après moi : <phrase corrigée>'."
+                return f"CORRECTION REQUISE: L'étudiant a dit \"{original}\". Forme correcte : \"{correction}\" ({explanation}). Corrige cette faute en félicitant l'effort et dis 'Répète après moi : {correction}'."
             else:
-                return f"CORRECTION REQUISE: L'étudiant a fait une erreur — {explanation}. Tu DOIS corriger cette erreur avec la Méthode du Sandwich."
+                return f"CORRECTION REQUISE: L'étudiant a fait une erreur ({explanation}). Corrige cette faute poliment."
     return None
 
 # --- RESPONSE DIVERSITY POOL (POST-LLM FALLBACK) ---
@@ -472,7 +472,7 @@ PIVOT_RESPONSES = {
     "SCHOOL": [
         "L'école, c'est important ! Tu aimes tes cours, {name} ?",
         "Qu'est-ce que tu étudies en ce moment ?",
-        "Tu as un cours préféré, {name} ?",
+        "Tu me suggères quel cours préféré, {name} ?",
     ],
     "TRAVEL": [
         "Le voyage, c'est super ! Tu es déjà allé où, {name} ?",
@@ -528,8 +528,8 @@ def count_tokens(text):
 
 MAX_OUTPUT_TOKENS = 150
 SAFETY_MARGIN = 20
-N_CTX = 512
-INPUT_TOKEN_BUDGET = N_CTX - MAX_OUTPUT_TOKENS - SAFETY_MARGIN  # = 342 tokens for input
+N_CTX = 768
+INPUT_TOKEN_BUDGET = N_CTX - MAX_OUTPUT_TOKENS - SAFETY_MARGIN
 
 def build_token_safe_messages(system_instruction, user_text, history):
     """Builds a message list guaranteed to fit within the LLM's context window.
@@ -701,7 +701,7 @@ class BmoBridge:
                 "2. INTERDICTION DU PERROQUET : Ne répète jamais la phrase de l'étudiant mot pour mot dans ta réponse.\n"
                 "3. CORRECTION ACTIVE (MÉTHODE DU SANDWICH) : Si l'étudiant fait une faute (par exemple 'Je va bien' au lieu de 'Je vais bien'), félicite l'effort et corrige-la poliment en expliquant brièvement la conjugaison.\n"
                 "4. FLUX NATUREL & PROGRESSION : Réagis au sens exact de ce que dit l'étudiant et fais avancer la discussion. Pose une NOUVELLE question différente à chaque tour (ne redemande jamais 'Comment allez-vous ?').\n"
-                "5. FORMAT & LANGUE : Parle EXCLUSIVEMENT en français. 1 ou 2 phrases maximum en français simple (présent, passé composé, imparfait, ou futur)."
+                "5. FORMAT OBLIGATOIRE DE SORTIE : Tu DOIS toujours répondre sur deux lignes avec FR: et EN: (Exemple: FR: Très bien ! EN: Very good!)."
             )
             
             if self.roleplay.mode == "ROLEPLAY":
