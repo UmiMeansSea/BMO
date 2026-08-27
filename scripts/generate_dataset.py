@@ -215,7 +215,7 @@ ROWS = [
     ("P200", "Ils sont devenus de très bons amis au fil du temps.", "CORRECT", "Ils sont devenus de très bons amis au fil du temps.", "None", "B1", False),
 ]
 
-output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bmo_french_dataset.csv")
+output_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "bmo_french_dataset.csv")
 headers = ["Prompt_ID", "User_Input_French", "Error_Type", "Expected_Correction",
            "Error_Subtype", "CEFR_Level", "Is_Erroneous"]
 

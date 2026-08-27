@@ -4,7 +4,6 @@ import time
 import sys
 from pathlib import Path
 from llama_cpp import Llama
-from codecarbon import EmissionsTracker
 
 # -------------------------------------------------------------------------
 # Configuration
@@ -13,7 +12,8 @@ _POINTER = Path(__file__).parent / ".model_path"
 MODEL_PATH = Path(_POINTER.read_text(encoding="utf-8").strip()) if _POINTER.exists() \
                 else Path(r"D:\BMO-Research\models\bmo-model-3b-4bit.gguf")
 
-DATASET_PATH = Path(__file__).parent / "bmo_french_dataset.csv"
+DATASET_PATH = Path(__file__).parent.parent / "data" / "bmo_french_dataset.csv"
+NUM_PILOT_PROMPTS = 10
 
 # -------------------------------------------------------------------------
 # Balanced JSON Chain-of-Thought (CoT) System Prompt
@@ -60,60 +60,45 @@ Response: {
 }
 """
 
-def load_full_dataset(csv_path: Path):
+def load_pilot_dataset(csv_path: Path, limit: int = 10):
     prompts = []
     with open(csv_path, mode="r", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         for idx, row in enumerate(reader):
+            if idx >= limit:
+                break
             prompts.append({
                 "id": row.get("Prompt_ID", str(idx + 1)),
                 "text": row.get("User_Input_French", ""),
-                "expected_error": row.get("Error_Type", "None"),
-                "is_erroneous": row.get("Is_Erroneous", "FALSE").strip().upper() == "TRUE"
+                "expected_error": row.get("Error_Type", "None")
             })
     return prompts
 
-def run_full_benchmark():
-    print("=" * 80)
-    print("  BMO FULL BENCHMARK EVALUATION (200 ROWS)")
-    print("=" * 80)
-    print(f"[*] Model Path  : {MODEL_PATH}")
-    print(f"[*] Dataset     : {DATASET_PATH.name}")
-
+def run_pilot_sanity_check():
+    print(f"[*] Initializing local engine with model: {MODEL_PATH}")
     if not Path(MODEL_PATH).exists():
         print(f"[!] Error: Model file not found at {MODEL_PATH}")
         sys.exit(1)
 
-    # Initialize llama.cpp engine with CPU constraints
+    # Initialize llama.cpp with strict CPU constraints
     llm = Llama(
         model_path=str(MODEL_PATH),
         n_ctx=2048,
-        n_threads=4,      # Adjust based on laptop CPU cores
-        n_gpu_layers=0,   # 100% CPU inference
+        n_threads=4,      # Adjust based on your laptop CPU cores
+        n_gpu_layers=0,   # Force 100% CPU inference
         verbose=False
     )
 
-    prompts = load_full_dataset(DATASET_PATH)
-    print(f"[*] Loaded {len(prompts)} prompts from {DATASET_PATH.name}\n")
+    prompts = load_pilot_dataset(DATASET_PATH, limit=NUM_PILOT_PROMPTS)
+    print(f"[*] Loaded {len(prompts)} pilot prompts from {DATASET_PATH}\n")
 
     results = []
     passed_count = 0
     total_latency = 0.0
 
-    print("[*] Starting CodeCarbon EmissionsTracker...")
-    tracker = EmissionsTracker(
-        project_name="bmo_edge",
-        measure_power_secs=1,
-        log_level="warning",
-        output_dir=str(Path(__file__).parent)
-    )
-    tracker.start()
-
     print("=" * 80)
     print(f"{'ID':<6} | {'Target Error':<30} | {'Model Detected':<20} | {'Status':<8} | {'Latency'}")
     print("=" * 80)
-
-    start_eval_time = time.perf_counter()
 
     for item in prompts:
         messages = [
@@ -123,7 +108,7 @@ def run_full_benchmark():
 
         start_time = time.perf_counter()
         
-        # Enforce JSON-object decoding
+        # Enforce JSON-object generation via llama-cpp-python
         response = llm.create_chat_completion(
             messages=messages,
             temperature=0.0,       # Strict deterministic decoding
@@ -136,6 +121,7 @@ def run_full_benchmark():
 
         raw_output = response["choices"][0]["message"]["content"]
         
+        # Parse and score
         try:
             parsed = json.loads(raw_output)
             model_has_error = parsed.get("has_error", False)
@@ -143,8 +129,10 @@ def run_full_benchmark():
             feedback = parsed.get("feedback", "")
             analysis = parsed.get("grammatical_analysis", "")
             
-            ground_truth_has_error = item["is_erroneous"]
+            # Ground truth validation
+            ground_truth_has_error = (item["expected_error"].strip().lower() not in ["none", "none (correct)", "correct"])
             
+            # Pass if both agree on the presence/absence of error
             is_pass = (model_has_error == ground_truth_has_error)
             if is_pass:
                 passed_count += 1
@@ -162,48 +150,20 @@ def run_full_benchmark():
             })
 
             print(f"{item['id']:<6} | {item['expected_error']:<30} | {str(model_error_type):<20} | {status:<8} | {latency:.2f}s")
-            sys.stdout.flush()
+            print(f"  -> Analysis: \"{analysis}\"")
+            print(f"  -> Input:    \"{item['text']}\"")
+            print(f"  -> Feedback: \"{feedback}\"\n")
 
         except json.JSONDecodeError:
             print(f"{item['id']:<6} | {item['expected_error']:<30} | {'PARSER ERROR':<20} | {'FAIL':<8} | {latency:.2f}s")
-
-    emissions_kg = tracker.stop()
-    total_eval_wall_time = time.perf_counter() - start_eval_time
-
-    # Calculate energy consumed in Watt-hours
-    energy_kwh = tracker._total_energy.kWh if hasattr(tracker, '_total_energy') and tracker._total_energy else 0.0
-    energy_wh = energy_kwh * 1000.0
+            print(f"  -> Raw Output: {raw_output}\n")
 
     print("=" * 80)
-    print("FULL BENCHMARK SUMMARY:")
+    print(f"PILOT SUMMARY:")
+    print(f"Total Evaluated: {len(prompts)}")
+    print(f"Passed: {passed_count}/{len(prompts)} ({(passed_count/len(prompts))*100:.1f}%)")
+    print(f"Avg Latency: {total_latency / len(prompts):.2f}s per sentence")
     print("=" * 80)
-    print(f"Total Evaluated        : {len(prompts)} rows")
-    print(f"Passed                 : {passed_count}/{len(prompts)} ({(passed_count/len(prompts))*100:.2f}%)")
-    print(f"Failed                 : {len(prompts) - passed_count}")
-    print(f"Average Latency        : {total_latency / len(prompts):.2f}s per sentence")
-    print(f"Total Benchmark Time   : {total_eval_wall_time / 60.0:.2f} minutes")
-    print(f"Total Energy Consumed  : {energy_wh:.2f} Wh ({energy_kwh:.6f} kWh)")
-    print(f"Total CO2 Emissions    : {emissions_kg * 1000.0:.2f} g CO2e ({emissions_kg:.6f} kg)")
-    print("=" * 80)
-
-    # Save benchmark report artifact
-    benchmark_report_path = Path(__file__).parent / "full_benchmark_results.json"
-    with open(benchmark_report_path, "w", encoding="utf-8") as f:
-        json.dump({
-            "summary": {
-                "total_rows": len(prompts),
-                "passed": passed_count,
-                "failed": len(prompts) - passed_count,
-                "pass_rate_pct": round((passed_count/len(prompts))*100, 2),
-                "avg_latency_s": round(total_latency / len(prompts), 2),
-                "total_time_min": round(total_eval_wall_time / 60.0, 2),
-                "energy_consumed_wh": round(energy_wh, 2),
-                "emissions_co2_g": round(emissions_kg * 1000.0, 2),
-                "model": str(MODEL_PATH.name)
-            },
-            "results": results
-        }, f, indent=2, ensure_ascii=False)
-    print(f"\n[OK] Benchmark results saved to: {benchmark_report_path.name}")
 
 if __name__ == "__main__":
-    run_full_benchmark()
+    run_pilot_sanity_check()

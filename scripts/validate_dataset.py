@@ -1,6 +1,6 @@
 import csv
 
-with open(r'bmo_french_dataset.csv', encoding='utf-8') as f:
+with open(r'../data/bmo_french_dataset.csv', encoding='utf-8') as f:
     rows = list(csv.DictReader(f))
 
 total = len(rows)

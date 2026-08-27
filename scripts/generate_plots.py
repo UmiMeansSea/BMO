@@ -84,7 +84,7 @@ def generate_benchmark_plots():
 
     # Polish and save the composite figure
     plt.tight_layout()
-    output_path = Path("bmo_full_benchmark_metrics.png")
+    output_path = Path(__file__).parent.parent / "assets" / "bmo_full_benchmark_metrics.png"
     plt.savefig(output_path)
     print(f"[*] Saved publication figure (300 DPI) to: '{output_path.name}'")
     print("=" * 60)

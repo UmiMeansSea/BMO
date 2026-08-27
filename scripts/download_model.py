@@ -31,7 +31,7 @@ MODELS_DIR   = Path(r"D:\BMO-Research\models")
 OUTPUT_PATH  = MODELS_DIR / OUTPUT_NAME
 
 # Pointer file: tells local_sanity_check.py where the model lives
-POINTER_PATH = Path(__file__).parent / ".model_path"
+POINTER_PATH = Path(__file__).parent.parent / ".model_path"
 
 def main():
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
