@@ -589,6 +589,7 @@ class BmoBridge:
 
     def process_pipeline(self):
         try:
+            intercepted_bmo_text = None
             with BUFFER_LOCK:
                 if not AUDIO_BUFFER:
                     print("[WARN] Audio buffer empty.")
