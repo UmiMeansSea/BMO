@@ -1,11 +1,11 @@
 """
-BMO Live Edge Tutor - Continuous Voice & Pedagogical Memory Architecture
-========================================================================
-Key Upgrades:
-1. Whisper ASR upgrade to 'small' model for high-fidelity French accent recognition.
-2. Sliding Window Memory (gr.State): Keeps System Prompt + last 6 conversation turns.
-3. Sandwich Method French Tutor Rules (Correction -> Explanation -> Scaffolding).
-4. Pure Python Scipy & Librosa DSP Pitch-Shift (+4.0 semitones, 1.15x speed).
+BMO Live Edge Tutor - Sliding Window & Conversation Summarization Memory Architecture
+====================================================================================
+Key Features:
+1. Active Sliding Window Memory (Last 4 turns).
+2. Dynamic Rolling Background Summarization: Oldest turns beyond the window are summarized into a concise context block.
+3. System Prompt Integration: System Prompt + Long-term Summary + Active Turns.
+4. Whisper 'small' ASR + Qwen LLM + Kokoro TTS (+4.0 semitone pitch shift).
 """
 
 import sys
@@ -46,7 +46,7 @@ LLM_PATH = MODELS_DIR / "bmo-model-4bit.gguf"
 KOKORO_MODEL = MODELS_DIR / "kokoro-v1.0.onnx"
 KOKORO_VOICES = MODELS_DIR / "voices-v1.0.bin"
 
-print("[*] Initializing BMO Continuous Voice & Pedagogical Memory Architecture...")
+print("[*] Initializing BMO Hybrid Memory Architecture (Sliding Window + Summarization)...")
 print("  1/3 Loading Whisper ASR (small)...")
 whisper_model = whisper.load_model("small")
 
@@ -66,7 +66,7 @@ except Exception as e:
     print(f"[!] Kokoro load notice: {e}")
     has_kokoro = False
 
-print("[OK] Complete BMO system architecture loaded successfully!\n")
+print("[OK] Complete BMO hybrid memory architecture initialized!\n")
 
 BMO_SYSTEM_PROMPT = """You are BMO (pronounced Beemo), an encouraging, highly attentive French language tutor. The user is a beginner (A2/B1).
 RULES:
@@ -174,12 +174,33 @@ bmo_html = f"""
 </script>
 """
 
-def bmo_pipeline(audio_data, history):
-    if history is None:
-        history = []
+def summarize_turns(old_turns: list, current_summary: str) -> str:
+    """Summarize older conversation turns into a concise memory text block."""
+    lines = []
+    for turn in old_turns:
+        role = "User" if turn["role"] == "user" else "BMO"
+        lines.append(f"{role}: {turn['content']}")
+    turn_text = " | ".join(lines)
+    
+    if current_summary:
+        new_summary = f"{current_summary}; {turn_text}"
+    else:
+        new_summary = f"Summary of past topics: {turn_text}"
+    
+    # Cap total summary length to prevent context explosion
+    if len(new_summary) > 250:
+        new_summary = new_summary[-250:]
+    return new_summary
+
+def bmo_pipeline(audio_data, history_data):
+    if history_data is None:
+        history_data = {"turns": [], "summary": ""}
+
+    turns = history_data.get("turns", [])
+    summary = history_data.get("summary", "")
 
     if audio_data is None:
-        return None, "Silence detected.", "idle", history
+        return None, "Silence detected.", summary, "idle", history_data
 
     print("\n[*] Processing incoming audio stream...")
     
@@ -191,14 +212,12 @@ def bmo_pipeline(audio_data, history):
         except Exception:
             sr, arr = 44100, np.zeros(44100, dtype=np.float32)
 
-    # Convert to 1D float32 array normalized to [-1.0, 1.0]
     arr = np.asarray(arr, dtype=np.float32)
     if arr.ndim > 1:
         arr = arr.mean(axis=1)
     if np.max(np.abs(arr)) > 1.0:
         arr = arr / 32768.0
 
-    # Resample audio to 16,000 Hz for Whisper
     if sr != 16000:
         num_samples = int(len(arr) * 16000 / sr)
         arr_16k = scipy.signal.resample(arr, num_samples).astype(np.float32)
@@ -212,27 +231,40 @@ def bmo_pipeline(audio_data, history):
         user_text = "Bonjour !"
     print(f"  [1/3 Ears] Transcribed (small): \"{user_text}\"")
 
-    # Append User Input to Conversation Memory
-    history.append({"role": "user", "content": user_text})
+    # Append User turn
+    turns.append({"role": "user", "content": user_text})
 
-    # Sliding Window Context: System Prompt + last 6 conversation turns
-    messages = [{"role": "system", "content": BMO_SYSTEM_PROMPT}] + history[-6:]
+    # Rolling Memory Summarization: Keep last 4 turns in active window, summarize older turns
+    SLIDING_WINDOW_SIZE = 4
+    if len(turns) > SLIDING_WINDOW_SIZE:
+        old_turns = turns[:-SLIDING_WINDOW_SIZE]
+        turns = turns[-SLIDING_WINDOW_SIZE:]
+        summary = summarize_turns(old_turns, summary)
+        print(f"  [Memory Engine] Summarized old turns. New Summary: \"{summary}\"")
+
+    # Construct System Prompt with Background Memory Summary
+    system_prompt_with_summary = BMO_SYSTEM_PROMPT
+    if summary:
+        system_prompt_with_summary += f"\nBACKGROUND MEMORY: {summary}"
+
+    messages = [{"role": "system", "content": system_prompt_with_summary}] + turns
 
     # 2. Brain: Generate Pedagogical Response with Qwen LLM
     if has_llm:
         response = llm.create_chat_completion(
             messages=messages,
-            max_tokens=100
+            max_tokens=90
         )
         bmo_text = response["choices"][0]["message"]["content"]
     else:
-        bmo_text = f"Salut ! J'ai bien entendu : '{user_text}'. C'est une très bonne phrase ! Comment s'est passée ta journée ?"
+        bmo_text = f"Salut ! J'ai bien entendu : '{user_text}'. C'est une très bonne phrase !"
     
     bmo_text = bmo_text.replace("BMO", "Beemo")
     print(f"  [2/3 Brain] BMO generated: \"{bmo_text}\"")
 
-    # Append BMO Response to Memory
-    history.append({"role": "assistant", "content": bmo_text})
+    # Append BMO turn
+    turns.append({"role": "assistant", "content": bmo_text})
+    history_data = {"turns": turns, "summary": summary}
 
     # 3. Voice & DSP: Kokoro TTS (1.15x speed) + Pitch Shift (+4.0 semitones)
     sr_out = 24000
@@ -254,19 +286,19 @@ def bmo_pipeline(audio_data, history):
     samples_int16 = (samples_shifted * 32767).astype(np.int16)
     wav.write(out_wav, sr_out, samples_int16)
 
-    # Format full transcript for UI display
+    # Format active turns for display
     transcript_display = ""
-    for item in history[-6:]:
+    for item in turns:
         role_label = "User" if item["role"] == "user" else "BMO"
         transcript_display += f"{role_label}: {item['content']}\n"
 
-    return out_wav, transcript_display.strip(), "speaking", history
+    return out_wav, transcript_display.strip(), summary, "speaking", history_data
 
 with gr.Blocks() as demo:
-    gr.Markdown("<h1 style='text-align: center;'>🤖 BMO Live Edge Tutor - Pedagogical Memory Dashboard</h1>")
+    gr.Markdown("<h1 style='text-align: center;'>🤖 BMO Live Edge Tutor - Hybrid Memory Architecture</h1>")
     
-    # Conversation History State
-    chat_memory = gr.State([])
+    # Hybrid Memory State: stores dict with {"turns": list, "summary": str}
+    chat_memory = gr.State({"turns": [], "summary": ""})
 
     with gr.Row():
         with gr.Column(scale=1):
@@ -274,14 +306,15 @@ with gr.Blocks() as demo:
         with gr.Column(scale=1):
             audio_in = gr.Audio(sources=["microphone"], type="numpy", label="Speak to BMO")
             audio_out = gr.Audio(label="BMO Response", autoplay=True)
-            txt_log = gr.Textbox(label="Sliding Window Conversation Memory (Last 6 Turns)", lines=6)
+            txt_log = gr.Textbox(label="Active Sliding Window (Last 4 Turns)", lines=4)
+            txt_summary = gr.Textbox(label="Long-Term Background Memory Summary", lines=3)
             bmo_state = gr.Textbox(visible=False)
             btn = gr.Button("Talk to BMO", variant="primary")
             
             btn.click(
                 fn=bmo_pipeline, 
                 inputs=[audio_in, chat_memory], 
-                outputs=[audio_out, txt_log, bmo_state, chat_memory]
+                outputs=[audio_out, txt_log, txt_summary, bmo_state, chat_memory]
             )
 
     bmo_state.change(
@@ -291,5 +324,5 @@ with gr.Blocks() as demo:
     )
 
 if __name__ == "__main__":
-    print("[*] Launching Pedagogical BMO Memory Dashboard on http://127.0.0.1:7885 ...")
-    demo.launch(server_name="127.0.0.1", server_port=7885)
+    print("[*] Launching Hybrid Memory BMO Dashboard on http://127.0.0.1:7890 ...")
+    demo.launch(server_name="127.0.0.1", server_port=7890)
