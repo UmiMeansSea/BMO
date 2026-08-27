@@ -1,0 +1,26 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Local environment / dependencies
+.venv/
+venv/
+ENV/
+env/
+
+# Model GGUF binaries and large cache directories
+*.gguf
+*.bin
+*.pt
+*.onnx
+.model_path
+pip-cache/
+.cache/
+
+# CodeCarbon temporary outputs
+emissions.csv
+
+# System files
+.DS_Store
+Thumbs.db
