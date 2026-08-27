@@ -2,9 +2,9 @@
 BMO Live Edge Tutor - Integrated Aesthetic Dashboard & Push-to-Talk UI
 ======================================================================
 Fixes:
-1. JavaScript Window Scope: Explicit window.toggleBmoRecord = function() definition inside <script>.
-2. Hardware Push-to-Talk JS Bridge with Web Audio Bleeps (880 Hz start, 440 Hz stop).
-3. Dark Mode Neutralization & Cloaked Audio Engine.
+1. Native Gradio head JS injection: Defines window.toggleBmoRecord globally BEFORE DOM elements render.
+2. Custom CSS & High-contrast dark text styling.
+3. Clean Push-to-Talk Recording & Auto-Submit Pipeline.
 """
 
 import sys
@@ -28,7 +28,7 @@ except ImportError as e:
 MODELS_DIR = Path(r"D:\BMO-Research\models")
 LLM_PATH = MODELS_DIR / "bmo-model-4bit.gguf"
 
-print("[*] Initializing Fixed Push-to-Talk BMO Dashboard System...")
+print("[*] Initializing Head-Injected BMO Dashboard System...")
 print("  1/2 Loading Whisper ASR (small)...")
 whisper_model = whisper.load_model("small")
 
@@ -40,7 +40,7 @@ except Exception as e:
     print(f"[!] LLM load notice: {e}")
     has_llm = False
 
-print("[OK] Fixed Push-to-Talk BMO system initialized successfully!\n")
+print("[OK] Head-Injected BMO system initialized successfully!\n")
 
 BMO_SYSTEM_PROMPT = """You are BMO (pronounced Beemo), an encouraging, highly attentive French language tutor. The user is a beginner (A2/B1).
 RULES:
@@ -87,6 +87,67 @@ css_styles = """
 .cute-chat .message.bot { background-color: #d7f4a5 !important; border: 2px solid #bce27f !important; border-radius: 20px 20px 20px 0 !important; padding: 12px !important; }
 """
 
+head_js = """
+<script>
+    window.isBmoRecording = false;
+
+    window.playBmoBeep = function(freq) {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, ctx.currentTime);
+            gain.gain.setValueAtTime(0.1, ctx.currentTime);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.15);
+        } catch(e) {}
+    };
+
+    window.toggleBmoRecord = function() {
+        const micContainer = document.getElementById('bmo-mic');
+        if (!micContainer) return;
+
+        if (!window.isBmoRecording) {
+            const recordBtn = micContainer.querySelector('button[aria-label="Record"]') || micContainer.querySelector('button');
+            if (recordBtn) {
+                recordBtn.click();
+                window.isBmoRecording = true;
+                window.playBmoBeep(880);
+                window.setBMOState('listening');
+            }
+        } else {
+            const stopBtn = micContainer.querySelector('button[aria-label="Stop"]') || micContainer.querySelector('button');
+            if (stopBtn) {
+                stopBtn.click();
+                window.isBmoRecording = false;
+                window.playBmoBeep(440);
+                window.setBMOState('thinking');
+            }
+        }
+    };
+
+    window.setBMOState = function(state) {
+        const screen = document.getElementById('bmo-screen');
+        const mouth = document.getElementById('bmo-mouth');
+        if (!screen || !mouth) return;
+
+        screen.className = 'bmo-screen';
+        mouth.classList.remove('speaking');
+
+        if (state === 'listening') {
+            screen.classList.add('listening');
+        } else if (state === 'thinking') {
+            screen.classList.add('thinking');
+        } else if (state === 'speaking') {
+            mouth.classList.add('speaking');
+        }
+    };
+</script>
+"""
+
 bmo_html = f"""
 <style>
 {css_styles}
@@ -105,64 +166,6 @@ bmo_html = f"""
     <div class="bmo-rc" onclick="window.toggleBmoRecord()"></div>
     <div class="bmo-pill p1"></div><div class="bmo-pill p2"></div>
 </div>
-<script>
-    window.isBmoRecording = false;
-
-    window.playBmoBeep = function(freq) {{
-        try {{
-            const ctx = new (window.AudioContext || window.webkitAudioContext)();
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(freq, ctx.currentTime);
-            gain.gain.setValueAtTime(0.1, ctx.currentTime);
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            osc.start();
-            osc.stop(ctx.currentTime + 0.15);
-        }} catch(e) {{}}
-    }};
-
-    window.toggleBmoRecord = function() {{
-        const micContainer = document.getElementById('bmo-mic');
-        if (!micContainer) return;
-
-        if (!window.isBmoRecording) {{
-            const recordBtn = micContainer.querySelector('button[aria-label="Record"]') || micContainer.querySelector('button');
-            if (recordBtn) {{
-                recordBtn.click();
-                window.isBmoRecording = true;
-                window.playBmoBeep(880);
-                window.setBMOState('listening');
-            }}
-        }} else {{
-            const stopBtn = micContainer.querySelector('button[aria-label="Stop"]') || micContainer.querySelector('button');
-            if (stopBtn) {{
-                stopBtn.click();
-                window.isBmoRecording = false;
-                window.playBmoBeep(440);
-                window.setBMOState('thinking');
-            }}
-        }}
-    }};
-
-    window.setBMOState = function(state) {{
-        const screen = document.getElementById('bmo-screen');
-        const mouth = document.getElementById('bmo-mouth');
-        if (!screen || !mouth) return;
-
-        screen.className = 'bmo-screen';
-        mouth.classList.remove('speaking');
-
-        if (state === 'listening') {{
-            screen.classList.add('listening');
-        }} else if (state === 'thinking') {{
-            screen.classList.add('thinking');
-        }} else if (state === 'speaking') {{
-            mouth.classList.add('speaking');
-        }}
-    }};
-</script>
 """
 
 def summarize_turns(old_turns: list, current_summary: str) -> str:
@@ -282,7 +285,7 @@ def bmo_response_generator(audio_data, history_data):
 
     return out_wav, "speaking", messages, history_data
 
-with gr.Blocks(theme=gr.themes.Soft()) as demo:
+with gr.Blocks(head=head_js) as demo:
     gr.Markdown("<h1 style='text-align: center; color: #3ca993;'>🤖 BMO Live Edge Tutor</h1>")
     chat_memory = gr.State({"turns": [], "summary": "", "messages": []})
 
@@ -314,5 +317,5 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
     bmo_state.change(fn=None, inputs=[bmo_state], js="(state) => window.setBMOState(state)")
 
 if __name__ == "__main__":
-    print("[*] Launching Fixed Push-to-Talk BMO Dashboard on http://127.0.0.1:7905 ...")
-    demo.launch(server_name="127.0.0.1", server_port=7905)
+    print("[*] Launching Head-Injected BMO Dashboard on http://127.0.0.1:7910 ...")
+    demo.launch(server_name="127.0.0.1", server_port=7910)
