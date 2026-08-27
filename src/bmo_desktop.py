@@ -563,8 +563,8 @@ def build_token_safe_messages(system_instruction, user_text, history):
     total_input = fixed_cost + used_tokens
     print(f"[Token Budget] system={system_tokens} user={user_tokens} history={used_tokens} total_input={total_input}/{INPUT_TOKEN_BUDGET}")
     
-    # Assemble final message list
-    return selected_history + [{"role": "user", "content": user_text}, {"role": "system", "content": system_instruction}]
+    # Assemble final message list (System message MUST be first for ChatML/Qwen formatting)
+    return [{"role": "system", "content": system_instruction}] + selected_history + [{"role": "user", "content": user_text}]
 
 class BmoBridge:
     def __init__(self):
