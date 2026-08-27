@@ -126,8 +126,15 @@ head_js = """
     };
 
     window.toggleBmoRecord = function() {
-        const triggerBtn = document.querySelector('#bmo-trigger button');
-        if (!triggerBtn) return console.error("Hardware trigger missing!");
+        // Safely grab the button directly by its Gradio elem_id
+        let triggerBtn = document.getElementById('bmo-trigger');
+        
+        // Fallback in case a future Gradio update wraps the button in a div
+        if (triggerBtn && triggerBtn.tagName !== 'BUTTON') {
+            triggerBtn = triggerBtn.querySelector('button');
+        }
+        
+        if (!triggerBtn) return console.error("Hardware trigger missing! Check Gradio UI rendering.");
 
         window.isBmoRecording = !window.isBmoRecording;
         if (window.isBmoRecording) {
