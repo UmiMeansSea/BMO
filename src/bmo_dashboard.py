@@ -1,11 +1,10 @@
 """
-BMO Gradio Dashboard & Live State Machine UI
+BMO Gradio Dashboard & Live Voice DSP Engine
 ============================================
-Interactive animated BMO chassis with state-driven facial expressions:
-- Idle: Default green face with smile and blinking eyes.
-- Listening: Dark green background.
-- Thinking: Deep teal background.
-- Speaking: Animated mouth talking loop while audio plays.
+Interactive animated BMO chassis with cartoon voice pitch-shifting:
+- Kokoro ONNX TTS + librosa pitch shifting (+4 semitones, 1.15x speed).
+- PyTorch Whisper ASR.
+- State-driven animated UI.
 """
 
 import sys
@@ -13,19 +12,46 @@ import os
 from pathlib import Path
 import numpy as np
 import scipy.io.wavfile as wav
+import librosa
 
 try:
     import gradio as gr
     import whisper
+    from kokoro_onnx import Kokoro
 except ImportError as e:
     print(f"[!] Missing dependency: {e}")
     sys.exit(1)
 
-MODELS_DIR = Path(r"D:\BMO-Research\models")
+# Patch Kokoro speed data type issue if needed
+def _patched_create_audio(self, phonemes, voice, speed):
+    tokens = np.array(self.tokenizer.tokenize(phonemes[:510]), dtype=np.int64)
+    voice_style = voice[len(tokens)]
+    tokens_input = [[0, *tokens, 0]]
+    inputs = {
+        "input_ids": tokens_input,
+        "style": np.array(voice_style, dtype=np.float32),
+        "speed": np.array([speed], dtype=np.float32),
+    }
+    audio = self.sess.run(None, inputs)[0]
+    return audio, 24000
 
-print("[*] Initializing global ML models for BMO State Dashboard...")
-print("  1/1 Loading PyTorch Whisper ASR (tiny)...")
+Kokoro._create_audio = _patched_create_audio
+
+MODELS_DIR = Path(r"D:\BMO-Research\models")
+KOKORO_MODEL = MODELS_DIR / "kokoro-v1.0.onnx"
+KOKORO_VOICES = MODELS_DIR / "voices-v1.0.bin"
+
+print("[*] Initializing global ML models for BMO Cartoon Voice Dashboard...")
+print("  1/2 Loading PyTorch Whisper ASR (tiny)...")
 whisper_model = whisper.load_model("tiny")
+
+print(f"  2/2 Loading Kokoro TTS ({KOKORO_MODEL.name})...")
+try:
+    kokoro = Kokoro(str(KOKORO_MODEL), str(KOKORO_VOICES))
+    has_kokoro = True
+except Exception as e:
+    print(f"[!] Kokoro load warning: {e}")
+    has_kokoro = False
 print("[OK] Models initialized successfully!\n")
 
 css_styles = """
@@ -42,7 +68,7 @@ css_styles = """
     background-color: #2c5e50;
 }
 
-/* Hide SVG/CSS face elements during listening/thinking image overlay states */
+/* Hide SVG/CSS face elements during listening/thinking states */
 .bmo-screen.listening .bmo-eye, .bmo-screen.listening .bmo-mouth,
 .bmo-screen.thinking .bmo-eye, .bmo-screen.thinking .bmo-mouth {
     display: none;
@@ -193,21 +219,34 @@ def bmo_pipeline(audio_data):
     user_text = result.get("text", "").strip()
     if not user_text:
         user_text = "Bonjour !"
-    print(f"  [1/2 Ears] Transcribed: \"{user_text}\"")
+    print(f"  [1/3 Ears] Transcribed: \"{user_text}\"")
 
     # 2. Conversational response (Fast Tutor logic)
     bmo_text = f"Saluts ! J'ai bien entendu : '{user_text}'. C'est du très bon français !"
-    print(f"  [2/2 Brain] BMO generated: \"{bmo_text}\"")
+    print(f"  [2/3 Brain] BMO generated: \"{bmo_text}\"")
 
-    # 3. Audio beep tone output for lightweight playback
-    sample_rate = 24000
-    duration = 1.5
-    t = np.linspace(0, duration, int(sample_rate * duration), False)
-    tone = np.sin(2 * np.pi * 440 * t) * 0.3
-    samples_int16 = (tone * 32767).astype(np.int16)
-    
+    # 3. Cartoon Voice DSP Synthesis (Voice)
+    sr = 24000
+    if has_kokoro:
+        try:
+            # 1.15x speed for energetic cartoon cadence
+            samples, sr = kokoro.create(bmo_text, voice="ff_siwis", speed=1.15, lang="fr-fr")
+            samples = samples.squeeze().astype(np.float32)
+        except Exception as e:
+            print(f"[!] Kokoro synthesis warning: {e}")
+            t = np.linspace(0, 1.5, int(24000 * 1.5), False)
+            samples = np.sin(2 * np.pi * 520 * t).astype(np.float32) * 0.3
+    else:
+        t = np.linspace(0, 1.5, int(24000 * 1.5), False)
+        samples = np.sin(2 * np.pi * 520 * t).astype(np.float32) * 0.3
+
+    # Apply DSP Pitch-Shift (+4.0 semitones for high-pitched child console tone)
+    print("  [DSP Filter] Pitch shifting +4.0 semitones with librosa...")
+    samples_shifted = librosa.effects.pitch_shift(y=samples, sr=sr, n_steps=4.0)
+
     out_wav = "bmo_live_response.wav"
-    wav.write(out_wav, sample_rate, samples_int16)
+    samples_int16 = (samples_shifted * 32767).astype(np.int16)
+    wav.write(out_wav, sr, samples_int16)
 
     return out_wav, f"User: {user_text}\nBMO: {bmo_text}", "speaking"
 
@@ -237,5 +276,5 @@ with gr.Blocks() as demo:
     )
 
 if __name__ == "__main__":
-    print("[*] Launching BMO State Machine Dashboard on http://127.0.0.1:7872 ...")
-    demo.launch(server_name="127.0.0.1", server_port=7872)
+    print("[*] Launching BMO Cartoon Voice Dashboard on http://127.0.0.1:7875 ...")
+    demo.launch(server_name="127.0.0.1", server_port=7875)
