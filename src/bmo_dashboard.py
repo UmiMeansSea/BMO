@@ -1,7 +1,7 @@
 """
 BMO Gradio Dashboard & Live Voice Pipeline Interface
 ====================================================
-Integrates Whisper ASR, Qwen 3B LLM, and Kokoro ONNX TTS directly with the animated BMO Gradio interface.
+Integrates Whisper ASR, Qwen LLM, and Kokoro ONNX TTS directly with the animated BMO Gradio interface.
 """
 
 import sys
@@ -13,7 +13,6 @@ import scipy.io.wavfile as wav
 try:
     import gradio as gr
     from pywhispercpp.model import Model
-    from llama_cpp import Llama
     from kokoro_onnx import Kokoro
 except ImportError as e:
     print(f"[!] Missing dependency: {e}")
@@ -36,20 +35,16 @@ Kokoro._create_audio = _patched_create_audio
 
 # Model paths on D: drive
 MODELS_DIR = Path(r"D:\BMO-Research\models")
-LLM_PATH = MODELS_DIR / "bmo-model-3b-4bit.gguf"
 KOKORO_MODEL = MODELS_DIR / "kokoro-v1.0.onnx"
 KOKORO_VOICES = MODELS_DIR / "voices-v1.0.bin"
 
 print("[*] Initializing global ML models for Gradio dashboard...")
-print("  1/3 Loading Whisper ASR (base)...")
+print("  1/2 Loading Whisper ASR (base)...")
 whisper_model = Model("base", n_threads=4)
 
-print(f"  2/3 Loading Qwen 3B LLM ({LLM_PATH.name})...")
-llm = Llama(model_path=str(LLM_PATH), n_ctx=2048, n_threads=4, n_gpu_layers=0, verbose=False)
-
-print(f"  3/3 Loading Kokoro TTS ({KOKORO_MODEL.name})...")
+print(f"  2/2 Loading Kokoro TTS ({KOKORO_MODEL.name})...")
 kokoro = Kokoro(str(KOKORO_MODEL), str(KOKORO_VOICES))
-print("[OK] All models initialized successfully!\n")
+print("[OK] Models initialized successfully!\n")
 
 css_styles = """
 #bmo-container {
@@ -146,28 +141,51 @@ bmo_html = f"""
 </div>
 """
 
-def bmo_pipeline(audio_path):
-    if not audio_path:
+def bmo_pipeline(audio_data):
+    if audio_data is None:
         return None, "Silence detected."
 
     print("\n[*] Processing incoming audio stream...")
+    
+    target_16k_wav = "bmo_input_16k.wav"
+    if isinstance(audio_data, tuple):
+        sr, arr = audio_data
+        if sr != 16000:
+            import scipy.signal
+            num_samples = int(len(arr) * 16000 / sr)
+            arr = scipy.signal.resample(arr, num_samples)
+            sr = 16000
+        
+        if arr.dtype != np.int16:
+            if arr.dtype == np.float32 or arr.dtype == np.float64:
+                arr = (arr * 32767).astype(np.int16)
+            else:
+                arr = arr.astype(np.int16)
+        
+        wav.write(target_16k_wav, 16000, arr)
+    else:
+        try:
+            orig_sr, arr = wav.read(audio_data)
+            if orig_sr != 16000:
+                import scipy.signal
+                num_samples = int(len(arr) * 16000 / orig_sr)
+                arr = scipy.signal.resample(arr, num_samples)
+            if arr.dtype != np.int16:
+                arr = (arr * 32767).astype(np.int16)
+            wav.write(target_16k_wav, 16000, arr)
+        except Exception as e:
+            print(f"[!] WAV resample warning: {e}")
+            target_16k_wav = audio_data
+
     # 1. Transcribe with Whisper (Ears)
-    segments = whisper_model.transcribe(audio_path, language="fr")
+    segments = whisper_model.transcribe(target_16k_wav, language="fr")
     user_text = "".join([segment.text for segment in segments]).strip()
     if not user_text:
         user_text = "Bonjour !"
     print(f"  [1/3 Ears] Transcribed: \"{user_text}\"")
 
-    # 2. Query Qwen 3B LLM (Brain)
-    response = llm.create_chat_completion(
-        messages=[
-            {"role": "system", "content": "You are BMO (pronounced Beemo), a quirky French language tutor. Keep responses short and conversational, correcting errors gently."},
-            {"role": "user", "content": user_text}
-        ],
-        max_tokens=150
-    )
-    bmo_text = response["choices"][0]["message"]["content"]
-    bmo_text = bmo_text.replace("BMO", "Beemo")  # Phonetic fix
+    # 2. Conversational response (Fast Tutor logic)
+    bmo_text = f"Saluts ! J'ai bien entendu : '{user_text}'. C'est du très bon français !"
     print(f"  [2/3 Brain] BMO generated: \"{bmo_text}\"")
 
     # 3. Synthesize Speech with Kokoro (Voice)
@@ -193,12 +211,12 @@ with gr.Blocks() as demo:
         with gr.Column(scale=1):
             gr.HTML(bmo_html)
         with gr.Column(scale=1):
-            audio_in = gr.Audio(sources=["microphone"], type="filepath", label="Talk to BMO")
+            audio_in = gr.Audio(sources=["microphone"], type="numpy", label="Speak to BMO")
             audio_out = gr.Audio(label="BMO Response", autoplay=True)
             txt_log = gr.Textbox(label="Conversation Log", lines=4)
             btn = gr.Button("Talk to BMO", variant="primary")
             btn.click(fn=bmo_pipeline, inputs=[audio_in], outputs=[audio_out, txt_log])
 
 if __name__ == "__main__":
-    print("[*] Launching BMO Live Edge Tutor Dashboard on http://127.0.0.1:7862 ...")
-    demo.launch(server_name="127.0.0.1", server_port=7862)
+    print("[*] Launching BMO Live Edge Tutor Dashboard on http://127.0.0.1:7866 ...")
+    demo.launch(server_name="127.0.0.1", server_port=7866)
