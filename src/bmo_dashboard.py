@@ -1,11 +1,11 @@
 """
-BMO Live Edge Tutor - Sliding Window & Conversation Summarization Memory Architecture
-====================================================================================
-Key Features:
-1. Active Sliding Window Memory (Last 4 turns).
-2. Dynamic Rolling Background Summarization: Oldest turns beyond the window are summarized into a concise context block.
-3. System Prompt Integration: System Prompt + Long-term Summary + Active Turns.
-4. Whisper 'small' ASR + Qwen LLM + Kokoro TTS (+4.0 semitone pitch shift).
+BMO Live Edge Tutor - Integrated Memory & Voice Dashboard
+=========================================================
+1. Hybrid Memory: Active Sliding Window (4 turns) + Long-Term Background Memory Summary.
+2. Voice Synthesis Engine:
+   - High-fidelity French Speech Synthesis (gTTS French + librosa DSP pitch shift).
+   - Speed & Pitch: +4.0 semitones pitch shift for BMO's iconic cartoon timbre.
+3. ears & Brain: Whisper ASR (small) + Qwen LLM.
 """
 
 import sys
@@ -15,42 +15,25 @@ import numpy as np
 import scipy.io.wavfile as wav
 import scipy.signal
 import librosa
+from io import BytesIO
 
 try:
     import gradio as gr
     import whisper
     from llama_cpp import Llama
-    from kokoro_onnx import Kokoro
+    from gtts import gTTS
 except ImportError as e:
     print(f"[!] Missing dependency: {e}")
     sys.exit(1)
 
-# Patch Kokoro speed data type issue
-def _patched_create_audio(self, phonemes, voice, speed):
-    tokens = np.array(self.tokenizer.tokenize(phonemes[:510]), dtype=np.int64)
-    voice_style = voice[len(tokens)]
-    tokens_input = [[0, *tokens, 0]]
-    inputs = {
-        "input_ids": tokens_input,
-        "style": np.array(voice_style, dtype=np.float32),
-        "speed": np.array([speed], dtype=np.float32),
-    }
-    audio = self.sess.run(None, inputs)[0]
-    return audio, 24000
-
-Kokoro._create_audio = _patched_create_audio
-
-# Model paths on D: drive
 MODELS_DIR = Path(r"D:\BMO-Research\models")
 LLM_PATH = MODELS_DIR / "bmo-model-4bit.gguf"
-KOKORO_MODEL = MODELS_DIR / "kokoro-v1.0.onnx"
-KOKORO_VOICES = MODELS_DIR / "voices-v1.0.bin"
 
-print("[*] Initializing BMO Hybrid Memory Architecture (Sliding Window + Summarization)...")
-print("  1/3 Loading Whisper ASR (small)...")
+print("[*] Initializing BMO System (Whisper ASR + Qwen LLM + DSP Cartoon TTS)...")
+print("  1/2 Loading Whisper ASR (small)...")
 whisper_model = whisper.load_model("small")
 
-print(f"  2/3 Loading Qwen LLM ({LLM_PATH.name})...")
+print(f"  2/2 Loading Qwen LLM ({LLM_PATH.name})...")
 try:
     llm = Llama(model_path=str(LLM_PATH), n_ctx=512, n_batch=32, n_threads=4, n_gpu_layers=0, verbose=False)
     has_llm = True
@@ -58,15 +41,7 @@ except Exception as e:
     print(f"[!] LLM load notice: {e}")
     has_llm = False
 
-print(f"  3/3 Loading Kokoro TTS ({KOKORO_MODEL.name})...")
-try:
-    kokoro = Kokoro(str(KOKORO_MODEL), str(KOKORO_VOICES))
-    has_kokoro = True
-except Exception as e:
-    print(f"[!] Kokoro load notice: {e}")
-    has_kokoro = False
-
-print("[OK] Complete BMO hybrid memory architecture initialized!\n")
+print("[OK] BMO system initialized successfully!\n")
 
 BMO_SYSTEM_PROMPT = """You are BMO (pronounced Beemo), an encouraging, highly attentive French language tutor. The user is a beginner (A2/B1).
 RULES:
@@ -175,7 +150,6 @@ bmo_html = f"""
 """
 
 def summarize_turns(old_turns: list, current_summary: str) -> str:
-    """Summarize older conversation turns into a concise memory text block."""
     lines = []
     for turn in old_turns:
         role = "User" if turn["role"] == "user" else "BMO"
@@ -187,7 +161,6 @@ def summarize_turns(old_turns: list, current_summary: str) -> str:
     else:
         new_summary = f"Summary of past topics: {turn_text}"
     
-    # Cap total summary length to prevent context explosion
     if len(new_summary) > 250:
         new_summary = new_summary[-250:]
     return new_summary
@@ -231,10 +204,9 @@ def bmo_pipeline(audio_data, history_data):
         user_text = "Bonjour !"
     print(f"  [1/3 Ears] Transcribed (small): \"{user_text}\"")
 
-    # Append User turn
     turns.append({"role": "user", "content": user_text})
 
-    # Rolling Memory Summarization: Keep last 4 turns in active window, summarize older turns
+    # Rolling Memory Summarization: Keep last 4 turns in active window
     SLIDING_WINDOW_SIZE = 4
     if len(turns) > SLIDING_WINDOW_SIZE:
         old_turns = turns[:-SLIDING_WINDOW_SIZE]
@@ -242,7 +214,6 @@ def bmo_pipeline(audio_data, history_data):
         summary = summarize_turns(old_turns, summary)
         print(f"  [Memory Engine] Summarized old turns. New Summary: \"{summary}\"")
 
-    # Construct System Prompt with Background Memory Summary
     system_prompt_with_summary = BMO_SYSTEM_PROMPT
     if summary:
         system_prompt_with_summary += f"\nBACKGROUND MEMORY: {summary}"
@@ -262,31 +233,35 @@ def bmo_pipeline(audio_data, history_data):
     bmo_text = bmo_text.replace("BMO", "Beemo")
     print(f"  [2/3 Brain] BMO generated: \"{bmo_text}\"")
 
-    # Append BMO turn
     turns.append({"role": "assistant", "content": bmo_text})
     history_data = {"turns": turns, "summary": summary}
 
-    # 3. Voice & DSP: Kokoro TTS (1.15x speed) + Pitch Shift (+4.0 semitones)
-    sr_out = 24000
-    if has_kokoro:
-        try:
-            samples, sr_out = kokoro.create(bmo_text, voice="ff_siwis", speed=1.15, lang="fr-fr")
-            samples = samples.squeeze().astype(np.float32)
-        except Exception:
-            t = np.linspace(0, 1.5, int(24000 * 1.5), False)
-            samples = np.sin(2 * np.pi * 520 * t).astype(np.float32) * 0.3
-    else:
-        t = np.linspace(0, 1.5, int(24000 * 1.5), False)
-        samples = np.sin(2 * np.pi * 520 * t).astype(np.float32) * 0.3
-
-    print("  [3/3 Voice DSP] Pitch shifting +4.0 semitones with librosa...")
-    samples_shifted = librosa.effects.pitch_shift(y=samples, sr=sr_out, n_steps=4.0)
-
+    # 3. Voice & DSP: Synthesize French Speech + Pitch Shift (+4.0 semitones for BMO Cartoon Voice)
+    print("  [3/3 Voice] Synthesizing French speech...")
     out_wav = "bmo_live_response.wav"
-    samples_int16 = (samples_shifted * 32767).astype(np.int16)
-    wav.write(out_wav, sr_out, samples_int16)
+    try:
+        tts = gTTS(text=bmo_text, lang='fr', slow=False)
+        temp_mp3 = "temp_bmo_gtts.mp3"
+        tts.save(temp_mp3)
 
-    # Format active turns for display
+        # Convert audio to numpy array for librosa DSP pitch shift
+        import soundfile as sf
+        samples_raw, sr_out = sf.read(temp_mp3)
+        if samples_raw.ndim > 1:
+            samples_raw = samples_raw.mean(axis=1)
+
+        print("  [Voice DSP] Pitch shifting +4.0 semitones with librosa...")
+        samples_shifted = librosa.effects.pitch_shift(y=samples_raw.astype(np.float32), sr=sr_out, n_steps=4.0)
+
+        samples_int16 = (samples_shifted * 32767).astype(np.int16)
+        wav.write(out_wav, sr_out, samples_int16)
+    except Exception as e:
+        print(f"[!] TTS Error: {e}")
+        sr_out = 24000
+        t = np.linspace(0, 1.5, int(24000 * 1.5), False)
+        tone = np.sin(2 * np.pi * 520 * t) * 0.3
+        wav.write(out_wav, sr_out, (tone * 32767).astype(np.int16))
+
     transcript_display = ""
     for item in turns:
         role_label = "User" if item["role"] == "user" else "BMO"
@@ -295,9 +270,8 @@ def bmo_pipeline(audio_data, history_data):
     return out_wav, transcript_display.strip(), summary, "speaking", history_data
 
 with gr.Blocks() as demo:
-    gr.Markdown("<h1 style='text-align: center;'>🤖 BMO Live Edge Tutor - Hybrid Memory Architecture</h1>")
+    gr.Markdown("<h1 style='text-align: center;'>🤖 BMO Live Edge Tutor - Integrated System</h1>")
     
-    # Hybrid Memory State: stores dict with {"turns": list, "summary": str}
     chat_memory = gr.State({"turns": [], "summary": ""})
 
     with gr.Row():
@@ -324,5 +298,5 @@ with gr.Blocks() as demo:
     )
 
 if __name__ == "__main__":
-    print("[*] Launching Hybrid Memory BMO Dashboard on http://127.0.0.1:7890 ...")
-    demo.launch(server_name="127.0.0.1", server_port=7890)
+    print("[*] Launching BMO Dashboard on http://127.0.0.1:7892 ...")
+    demo.launch(server_name="127.0.0.1", server_port=7892)
