@@ -1,7 +1,10 @@
 import sys
 import os
 import time
+import re
+import json
 import threading
+from datetime import datetime
 from pathlib import Path
 import numpy as np
 import scipy.io.wavfile as wav
@@ -16,6 +19,11 @@ try:
 except ImportError as e:
     print(f"[!] Missing dependency: {e}")
     sys.exit(1)
+
+def normalize_bmo_name(text: str) -> str:
+    """Normalize any spoken phonetic variation of BMO's name to 'BMO'."""
+    pattern = re.compile(r"\b(beemo|bemo|bimo|bi\s+mo|b\.m\.o\.|beemow|bémos|beemoo)\b", re.IGNORECASE)
+    return pattern.sub("BMO", text)
 
 # --- MODELS SETUP ---
 BASE_DIR = Path(getattr(sys, '_MEIPASS', Path(sys.executable).parent))
@@ -58,13 +66,262 @@ try:
 except Exception:
     kokoro = None
 
-BMO_SYSTEM_PROMPT = """You are BMO (pronounced Beemo), a warm, quirky, and supportive French language tutor for an A2/B1 beginner. 
+BMO_SYSTEM_PROMPT = """Tu es BMO (prononcé Beemo), un tuteur de français chaleureux, original et encourageant pour un débutant.
 
-RULES:
-1. Language Flexibility: If the user speaks English (e.g., asking "How do I say X?"), answer their question clearly in English, but always provide the French translation and prompt them to repeat it in French. If they speak French, reply in French.
-2. Correction (Sandwich Method): If the user makes a grammatical or conjugation error in French, gently pause. Repeat the incorrect sentence, explain the error briefly in English, provide the correct French sentence, and ask them to repeat it.
-3. Scaffolding: Keep your sentences short and conversational. Use present, passé composé, imperfect, or future tenses.
-4. Flow: Always end your response with ONE simple follow-up question to keep them talking. Never ask multiple questions at once."""
+RÈGLES STRICTES:
+1. RECONNAISSANCE DE TON NOM: Ton nom est BMO (prononcé Beemo). L'utilisateur peut t'appeler BMO, Beemo, Bemo ou Bi Mo. Quand l'utilisateur prononce ton nom ou te salue avec ton nom (ex: "BMO", "Salut BMO", "Hey Beemo"), reconnais immédiatement qu'il s'adresse à toi avec enthousiasme (ex: "Oui ! C'est moi BMO !").
+2. LANGUE EXCLUSIVE: Réponds TOUJOURS et UNIQUEMENT en français dans ta partie FR.
+3. CORRECTION D'ERREURS (MÉTHODE DU SANDWICH): Si l'utilisateur fait une erreur de conjugaison ou de grammaire (ex: 'je mangeais' au lieu de 'j'ai mangé'), félicite l'effort, explique la faute de temps (passé composé vs imparfait), donne la bonne phrase avec 'ai mangé', et dis EXPLICITEMENT : "Répète après moi : <bonne phrase>".
+4. RÈGLE ABSOLUE DU POINT D'INTERROGATION: Tu ne dois avoir qu'UN SEUL point d'interrogation ('?') dans TOUTE ta réponse. Ne dis jamais 'Et vous ?' ni plusieurs questions. Pose uniquement UNE SEULE question simple à la fin.
+
+FORMAT DE SORTIE REQUIS:
+Tu DOIS TOUJOURS fournir ta réponse sous cette forme exacte avec deux lignes :
+FR: <Ta réponse en français>
+EN: <The exact English translation of your French response>"""
+
+# --- DYNAMIC ROLEPLAY ENGINE ---
+class RoleplayEngine:
+    """Manages conversational modes, in-character personas, and multi-turn debriefs."""
+    
+    def __init__(self):
+        self.mode = "TUTOR"  # Modes: "TUTOR" | "ROLEPLAY"
+        self.scenario = None
+        self.character_role = None
+        self.turn_count = 0
+        self.max_turns = 4
+        self.roleplay_history = []
+
+    def detect_roleplay_intent(self, user_text):
+        """Identifies scenario keywords and extracts the target setting."""
+        triggers = ["roleplay", "scenario", "practice ordering", "at a café", "at a restaurant", 
+                    "bakery", "boulangerie", "train station", "hotel", "exercise", "jeu de rôle", "jeu de role", "commander", "commande"]
+        lower_text = user_text.lower()
+        
+        if any(t in lower_text for t in triggers):
+            if "café" in lower_text or "coffee" in lower_text or "cafe" in lower_text:
+                return "a Parisian Café", "a friendly French barista"
+            elif "bakery" in lower_text or "boulangerie" in lower_text or "croissant" in lower_text or "pain" in lower_text:
+                return "a traditional French Boulangerie", "a busy local baker"
+            elif "train" in lower_text or "gare" in lower_text or "ticket" in lower_text or "billet" in lower_text:
+                return "Gare de Lyon Train Station", "an SNCF ticket agent"
+            elif "hotel" in lower_text or "room" in lower_text or "chambre" in lower_text:
+                return "a Boutique Hotel in Nice", "the hotel receptionist"
+            else:
+                return "a French Store", "the store shopkeeper"
+        return None, None
+
+    def get_system_prompt(self):
+        """Dynamically yields the appropriate system instructions based on active state."""
+        if self.mode == "ROLEPLAY":
+            return f"""Tu es BMO, et tu joues le rôle de {self.character_role} dans ce scénario : {self.scenario}.
+
+RÈGLES DU JEU DE RÔLE:
+1. Reste strictement dans ton personnage ({self.character_role}). Ne sors pas de ton rôle pour l'instant.
+2. Parle un français naturel et simple (niveau A2/B1). Fais des réponses courtes (1 à 2 phrases).
+3. Fais avancer la situation naturellement (demande sa commande, son choix, le paiement, etc.).
+4. Termine TOUJOURS par UNE seule question ou relance en personnage.
+
+FORMAT DE SORTIE REQUIS:
+Tu DOIS TOUJOURS fournir ta réponse sous cette forme exacte avec deux lignes :
+FR: <Ta réponse en français dans ton rôle>
+EN: <The exact English translation of your French roleplay line>"""
+        else:
+            return BMO_SYSTEM_PROMPT
+
+    def build_debrief_prompt(self):
+        """Generates a structured prompt to wrap up the roleplay session."""
+        transcript = "\n".join([f"{msg['role']}: {msg['content']}" for msg in self.roleplay_history])
+        return f"""Le jeu de rôle dans {self.scenario} est terminé.
+Voici la conversation :
+{transcript}
+
+TÂCHE: Donne un bilan court et encourageant en français :
+1. Un compliment chaleureux sur sa participation au jeu de rôle.
+2. Un conseil sur une faute de grammaire ou de prononciation observée.
+3. Le rappel de 2 phrases essentielles en français utilisées dans ce scénario.
+Fais un bilan court (3 à 4 phrases maximum).
+
+FORMAT DE SORTIE REQUIS:
+FR: <Ton bilan en français>
+EN: <The exact English translation of your French debrief>"""
+
+# --- ADAPTIVE SCAFFOLDING ENGINE ---
+class ScaffoldingEngine:
+    """Manages multi-tiered hints, hesitation detection, and dynamic audio pacing."""
+
+    def __init__(self):
+        self.hint_level = 0
+        self.last_assisted_target = None
+
+    def detect_scaffolding_request(self, text):
+        """Detects if the user is asking for assistance, vocabulary, or is hesitating."""
+        lower = text.lower().strip()
+        
+        # 1. Direct translation request
+        translation_match = re.search(r"(?:how do (?:i|you) say|how to say|what is the word for|comment dit-on)\s+['\"]?(.+?)['\"]?\??$", lower)
+        if translation_match:
+            target = translation_match.group(1).strip()
+            return "TRANSLATION", target
+
+        # 2. Explicit hint / hesitation keywords
+        hint_triggers = ["hint", "i'm stuck", "i don't know", "help me", "aide-moi", "give me a clue", "je ne sais pas"]
+        if any(t in lower for t in hint_triggers):
+            return "HINT", None
+
+        # 3. Trailing or hesitant input
+        if lower in ["euh", "je...", "uh", "um", "i want", "je veux..."] or len(lower.split()) <= 1:
+            return "HESITATION", None
+
+        return "NONE", None
+
+    def generate_hint_prompt(self, request_type, target, conversation_history):
+        """Builds system instructions to enforce tiered assistance."""
+        if request_type == "TRANSLATION":
+            return f"""L'utilisateur demande comment dire '{target}' en français.
+RÈGLES:
+1. Donne la traduction française de '{target}'.
+2. Donne une amorce de phrase courte.
+3. Demande à l'utilisateur de compléter sa phrase.
+
+FORMAT DE SORTIE REQUIS:
+FR: <Ta réponse et amorce en français>
+EN: <The exact English translation of your French response>"""
+
+        elif request_type in ["HINT", "HESITATION"]:
+            return """L'utilisateur hésite ou demande un indice.
+RÈGLES:
+1. Donne un indice encourageant ou une amorce de phrase en français (ex: 'Essaie de commencer par : Je voudrais...').
+2. Ne donne pas toute la phrase immédiatement.
+3. Demande-lui gentiment de compléter son idée.
+
+FORMAT DE SORTIE REQUIS:
+FR: <Ton indice et amorce en français>
+EN: <The exact English translation of your French response>"""
+
+        return None
+
+# --- SESSION MEMORY ENGINE ---
+class SessionMemoryEngine:
+    """Handles local storage of student weak points, hobbies, user name, and session history in session_review.json."""
+    
+    def __init__(self, filepath="session_review.json"):
+        self.filepath = Path(filepath)
+        self.past_data = self.load_history()
+        
+        self.user_name = self.past_data.get("user_name", None)
+        self.hobbies = self.past_data.get("hobbies", [])
+        
+        self.current_session = {
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "total_turns": 0,
+            "roleplays_completed": [],
+            "corrections_made": [],
+            "new_vocabulary": []
+        }
+
+    def load_history(self):
+        """Loads previous session data if it exists."""
+        if self.filepath.exists():
+            try:
+                with open(self.filepath, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                return {}
+        return {}
+
+    def detect_and_save_hobby(self, user_text):
+        """Silently listens for hobbies/passions and saves them to the ledger."""
+        pattern = r"(?:j'aime|j'adore|je joue|ma passion est|mon passe-temps est)\s+(?:à|de|de la|du|le|la|les|un|une)?\s*([a-zA-ZÀ-ÿ\s]+)"
+        match = re.search(pattern, user_text, re.IGNORECASE)
+        
+        if match:
+            hobby = match.group(1).strip().lower()
+            if hobby and len(hobby) > 2 and hobby not in self.hobbies:
+                self.hobbies.append(hobby)
+                self.past_data["hobbies"] = self.hobbies
+                self.save_raw()
+                print(f"[Memory Engine] New hobby logged: {hobby}")
+                return True
+        return False
+
+    def get_warmup_prompt(self):
+        """Injects past weak points and student persona into BMO's startup prompt."""
+        hobby_str = f" The student's hobbies and interests include: {', '.join(self.hobbies)}." if self.hobbies else ""
+        
+        if not self.past_data or "last_session" not in self.past_data:
+            return f"Welcome the student warmly in French.{hobby_str} Ask how their day is going."
+        
+        last_corrections = self.past_data["last_session"].get("corrections_made", [])
+        if last_corrections:
+            topics = ", ".join(last_corrections[:2])
+            return f"Welcome the student warmly in French.{hobby_str} In the last session, they struggled with: {topics}. Casually ask a simple question in French to test one of these concepts."
+        
+        return f"Welcome the student warmly in French.{hobby_str} Ask what they would like to practice today."
+
+    def log_turn(self, user_text, bmo_text):
+        self.current_session["total_turns"] += 1
+        self.detect_and_save_hobby(user_text)
+        self.log_correction(bmo_text)
+
+    def log_roleplay(self, scenario):
+        if scenario not in self.current_session["roleplays_completed"]:
+            self.current_session["roleplays_completed"].append(scenario)
+
+    def log_correction(self, bmo_response):
+        """Simple heuristic to log grammar topics if BMO makes corrections."""
+        lower_resp = bmo_response.lower()
+        topics = {
+            "passé composé": ["passé composé", "past tense", "conjugaison"],
+            "imparfait": ["imparfait", "habitual past"],
+            "gender agreement": ["masculine", "feminine", "genre", "accord"],
+            "future tense": ["future tense", "futur"]
+        }
+        
+        for topic, keywords in topics.items():
+            if any(k in lower_resp for k in keywords) and topic not in self.current_session["corrections_made"]:
+                self.current_session["corrections_made"].append(topic)
+
+    def save_raw(self):
+        try:
+            with open(self.filepath, "w", encoding="utf-8") as f:
+                json.dump(self.past_data, f, indent=4, ensure_ascii=False)
+        except Exception:
+            pass
+
+    def save_session(self, conversation_history, llm_instance=None):
+        """Triggers an LLM call to extract vocab on exit and saves the JSON file."""
+        print("[Memory Engine] Saving session data...")
+        
+        # 1. Extract vocabulary using the LLM if available
+        if llm_instance and len(conversation_history) > 2:
+            extraction_prompt = "Review this transcript and list 3 useful French vocabulary words or phrases the student learned or should remember. Output ONLY a comma-separated list."
+            msgs = [{"role": "system", "content": extraction_prompt}] + conversation_history[-6:]
+            try:
+                vocab_res = llm_instance.create_chat_completion(messages=msgs, max_tokens=30, temperature=0.1)
+                vocab_list = vocab_res["choices"][0]["message"]["content"].split(",")
+                self.current_session["new_vocabulary"] = [v.strip() for v in vocab_list if v.strip()]
+            except Exception as e:
+                print(f"Vocab extraction failed: {e}")
+
+        # Fallback if no LLM vocab extraction
+        if not self.current_session["new_vocabulary"] and conversation_history:
+            for turn in reversed(conversation_history):
+                if turn.get("role") == "assistant":
+                    words = [w.strip() for w in re.findall(r"\b[a-zA-ZàâäéèêëîïôöùûüçÀÂÄÉÈÊËÎÏÔÖÙÛÜÇ]{4,}\b", turn.get("content", ""))]
+                    self.current_session["new_vocabulary"] = list(set(words[:3]))
+                    break
+
+        # 2. Update and save local JSON ledger
+        self.past_data["hobbies"] = self.hobbies
+        self.past_data["last_session"] = self.current_session
+        if "all_time_weak_points" not in self.past_data:
+            self.past_data["all_time_weak_points"] = {}
+            
+        for topic in self.current_session["corrections_made"]:
+            self.past_data["all_time_weak_points"][topic] = self.past_data["all_time_weak_points"].get(topic, 0) + 1
+
+        self.save_raw()
+        print("[Memory Engine] Session saved successfully to session_review.json.")
 
 # --- HARDWARE AUDIO RECORDER ---
 AUDIO_BUFFER = []
@@ -85,6 +342,13 @@ except Exception as e:
 class BmoBridge:
     def __init__(self):
         self.history = []
+        self.roleplay = RoleplayEngine()
+        self.scaffolding = ScaffoldingEngine()
+        self.memory = SessionMemoryEngine()
+        
+        # Inject warm-up instruction based on past session history
+        warmup_instruction = self.memory.get_warmup_prompt()
+        self.warmup_prompt = f"{BMO_SYSTEM_PROMPT}\n\nCONTEXTE D'ACCUEIL :\n{warmup_instruction}"
 
     def toggle_record(self):
         global IS_RECORDING, AUDIO_BUFFER
@@ -107,57 +371,158 @@ class BmoBridge:
             audio_data = np.concatenate(AUDIO_BUFFER, axis=0).flatten()
             AUDIO_BUFFER.clear()
 
-            # 1. High-accuracy transcription settings
+            # 1. French-Only Whisper ASR
             result = whisper_model.transcribe(
                 audio_data, 
                 fp16=False, 
+                language="fr",
+                initial_prompt="Le nom du robot est BMO (prononcé Beemo). Transcription exacte du français parlé. BMO, Beemo, Bemo. Conserver les erreurs de prononciation sans les corriger.",
                 beam_size=5,          # Increases search accuracy for tricky phonemes
                 best_of=5,            # Evaluates multiple candidates to pick the best sentence
-                temperature=0.0       # Deterministic decoding to prevent hallucinated words
+                temperature=0.0,      # Deterministic decoding to prevent hallucinated words
+                condition_on_previous_text=False
             )
-            user_text = result.get("text", "").strip() or "Bonjour BMO!"
-            self.history.append({"role": "user", "content": user_text})
-            
-            # Update chat UI with user text
-            window.evaluate_js(f"window.appendChatMessage('user', {repr(user_text)});")
+            raw_text = result.get("text", "").strip() or "Bonjour BMO!"
+            user_text = normalize_bmo_name(raw_text)
 
-            # 2. LLM
-            llm_msgs = [{"role": "system", "content": BMO_SYSTEM_PROMPT}] + self.history[-4:]
+            # Detect exit command to save session
+            exit_triggers = ["goodbye", "au revoir", "see you later", "stop session", "à bientôt", "a bientot"]
+            if any(t in user_text.lower() for t in exit_triggers):
+                bmo_fr = "Au revoir ! J'ai enregistré tous nos progrès dans ton journal. À la prochaine !"
+                bmo_en = "Goodbye! I saved all our progress in your journal. See you next time!"
+                self.memory.save_session(self.history, llm if has_llm else None)
+                
+                bmo_fr = bmo_fr.replace("BMO", "Beemo")
+                bmo_en = bmo_en.replace("BMO", "Beemo")
+                
+                self.history.append({"role": "user", "content": user_text})
+                window.evaluate_js(f"window.appendChatMessage('user', {repr(user_text)});")
+                self.history.append({"role": "assistant", "content": bmo_fr})
+                window.evaluate_js(f"window.appendChatMessage('bot', {repr(bmo_fr)}, {repr(bmo_en)});")
+                
+                window.evaluate_js("window.setBMOState('speaking');")
+                if kokoro:
+                    try:
+                        audio, sr_out = kokoro.create(bmo_fr, voice="ff_siwis", speed=0.85, lang="fr-fr")
+                    except Exception:
+                        audio, sr_out = kokoro.create(bmo_fr, voice="af_bella", speed=0.85)
+                    audio_flat = audio.squeeze()
+                    pitch_factor = 1.2599
+                    new_len = int(len(audio_flat) / pitch_factor)
+                    samples_shifted = scipy.signal.resample(audio_flat, new_len).astype(np.float32)
+                    sd.play(samples_shifted, sr_out)
+                    sd.wait()
+                window.evaluate_js("window.setBMOState('idle');")
+                return
+
+            # 1. Listen for new hobbies passively & build Persona Context
+            self.memory.detect_and_save_hobby(user_text)
+            current_name = self.memory.user_name if self.memory.user_name else "a student"
+            hobby_context = ""
+            if self.memory.hobbies:
+                hobby_str = ", ".join(self.memory.hobbies)
+                hobby_context = f"\nThe student's hobbies and interests include: {hobby_str}. Naturally weave these topics into examples or conversation when relevant."
+
+            persona_prefix = f"The user's name is {current_name}.{hobby_context}\n\n"
+
+            # 2. Analyze Scaffolding & Roleplay Triggers
+            scaffold_type, target = self.scaffolding.detect_scaffolding_request(user_text)
+            current_tts_speed = 0.85
+
+            if scaffold_type != "NONE":
+                # Hint Mode Triggered -> Slower, clear articulation (0.70x)
+                current_tts_speed = 0.70
+                scaffold_prompt = persona_prefix + self.scaffolding.generate_hint_prompt(scaffold_type, target, self.history)
+                llm_msgs = [{"role": "system", "content": scaffold_prompt}] + self.history[-3:] + [{"role": "user", "content": user_text}]
+            elif self.roleplay.mode == "TUTOR":
+                scenario, role = self.roleplay.detect_roleplay_intent(user_text)
+                if scenario:
+                    self.roleplay.mode = "ROLEPLAY"
+                    self.roleplay.scenario = scenario
+                    self.roleplay.character_role = role
+                    self.roleplay.turn_count = 0
+                    self.roleplay.roleplay_history = []
+                    self.memory.log_roleplay(scenario)
+                
+                system_instruction = persona_prefix + self.roleplay.get_system_prompt()
+                llm_msgs = [{"role": "system", "content": system_instruction}] + self.history[-4:] + [{"role": "user", "content": user_text}]
+            else:
+                # Active Roleplay
+                self.roleplay.turn_count += 1
+                self.roleplay.roleplay_history.append({"role": "Student", "content": user_text})
+                
+                if self.roleplay.turn_count > self.roleplay.max_turns or any(w in user_text.lower() for w in ["stop", "finish", "done", "quitter", "terminer"]):
+                    current_tts_speed = 0.75
+                    debrief_query = self.roleplay.build_debrief_prompt()
+                    llm_msgs = [{"role": "system", "content": persona_prefix + "Tu es BMO le tuteur de français."}, {"role": "user", "content": debrief_query}]
+                    self.roleplay.mode = "TUTOR"
+                else:
+                    system_instruction = persona_prefix + self.roleplay.get_system_prompt()
+                    llm_msgs = [{"role": "system", "content": system_instruction}] + self.history[-4:] + [{"role": "user", "content": user_text}]
+
+            # 3. LLM Generation (French Response + English Translation)
             if has_llm:
-                bmo_text = llm.create_chat_completion(
+                full_resp = llm.create_chat_completion(
                     messages=llm_msgs, 
-                    max_tokens=80,
+                    max_tokens=160,
                     temperature=0.1,      # Keeps the logic locked down and precise
                     top_p=0.9
                 )["choices"][0]["message"]["content"]
             else:
-                bmo_text = f"J'ai entendu : '{user_text}'."
-            bmo_text = bmo_text.replace("BMO", "Beemo")
-            
-            self.history.append({"role": "assistant", "content": bmo_text})
-            window.evaluate_js(f"window.appendChatMessage('bot', {repr(bmo_text)});")
+                full_resp = f"FR: J'ai entendu : '{user_text}'. Comment ça va ?\nEN: I heard: '{user_text}'. How are you?"
 
-            # 3. TTS & Native Playback (Slowed Down for Beginners)
+            if "EN:" in full_resp:
+                parts = full_resp.split("EN:")
+                bmo_fr = parts[0].replace("FR:", "").strip()
+                bmo_en = parts[1].strip()
+            else:
+                bmo_fr = full_resp.replace("FR:", "").strip()
+                bmo_en = ""
+
+            # Secondary translation fallback if LLM omitted EN tag
+            if not bmo_en and has_llm and bmo_fr:
+                try:
+                    trans_resp = llm.create_chat_completion(
+                        messages=[{"role": "user", "content": f"Translate this French sentence into English: {bmo_fr}"}],
+                        max_tokens=60,
+                        temperature=0.0
+                    )
+                    bmo_en = trans_resp["choices"][0]["message"]["content"].strip()
+                except Exception:
+                    bmo_en = bmo_fr
+
+            if self.roleplay.mode == "ROLEPLAY":
+                self.roleplay.roleplay_history.append({"role": "BMO", "content": bmo_fr})
+
+            self.memory.log_turn(user_text, bmo_fr)
+
+            bmo_fr = bmo_fr.replace("BMO", "Beemo")
+            bmo_en = bmo_en.replace("BMO", "Beemo")
+
+            self.history.append({"role": "user", "content": user_text})
+            window.evaluate_js(f"window.appendChatMessage('user', {repr(user_text)});")
+            
+            self.history.append({"role": "assistant", "content": bmo_fr})
+            window.evaluate_js(f"window.appendChatMessage('bot', {repr(bmo_fr)}, {repr(bmo_en)});")
+
+            # 4. Kokoro / gTTS Adaptive Audio Synthesis
             window.evaluate_js("window.setBMOState('speaking');")
             if kokoro:
                 try:
-                    # Slowed speed from 1.15 to 0.75 for clear, beginner-friendly articulation
-                    audio, sr_out = kokoro.create(bmo_text, voice="ff_siwis", speed=0.75, lang="fr-fr")
+                    audio, sr_out = kokoro.create(bmo_fr, voice="ff_siwis", speed=current_tts_speed, lang="fr-fr")
                 except Exception:
-                    audio, sr_out = kokoro.create(bmo_text, voice="af_bella", speed=0.75)
+                    audio, sr_out = kokoro.create(bmo_fr, voice="af_bella", speed=current_tts_speed)
                 
                 audio_flat = audio.squeeze()
-                
-                # Retain the exact same high-pitched cartoon character profile
                 pitch_factor = 1.2599
                 new_len = int(len(audio_flat) / pitch_factor)
                 samples_shifted = scipy.signal.resample(audio_flat, new_len).astype(np.float32)
                 
                 sd.play(samples_shifted, sr_out)
-                sd.wait() # Wait until the slow, clear speech finishes completely
+                sd.wait()
             else:
                 from gtts import gTTS
-                tts = gTTS(text=bmo_text, lang='fr', slow=True)
+                tts = gTTS(text=bmo_fr, lang='fr', slow=True)
                 tts.save("temp_bmo_gtts.mp3")
                 import soundfile as sf
                 samples_raw, sr_out = sf.read("temp_bmo_gtts.mp3")
@@ -222,9 +587,49 @@ body { background-color: #122821; font-family: sans-serif; display: flex; justif
 
 /* Chat Box */
 #chat-container { width: 400px; height: 520px; background-color: #f4fce8; border: 4px solid #000; border-radius: 20px; display: flex; flex-direction: column; padding: 15px; box-sizing: border-box; overflow-y: auto; gap: 12px; }
-.message { padding: 12px; border-radius: 15px; font-size: 15px; max-width: 80%; line-height: 1.4; color: #1a1a1a; }
+.message { padding: 12px; border-radius: 15px; font-size: 15px; max-width: 82%; line-height: 1.4; color: #1a1a1a; position: relative; box-sizing: border-box; }
 .message.user { background-color: #fff9d2; border: 2px solid #fbe490; align-self: flex-end; border-bottom-right-radius: 2px; }
-.message.bot { background-color: #d7f4a5; border: 2px solid #bce27f; align-self: flex-start; border-bottom-left-radius: 2px; }
+.message.bot { background-color: #d7f4a5; border: 2px solid #bce27f; align-self: flex-start; border-bottom-left-radius: 2px; padding-bottom: 30px; }
+
+.translate-btn-small { 
+    position: absolute; 
+    bottom: 6px; 
+    right: 8px; 
+    background: linear-gradient(180deg, #ffffff 0%, #ecfdf5 100%); 
+    border: 2px solid #059669; 
+    color: #065f46; 
+    border-radius: 12px; 
+    padding: 3px 9px; 
+    font-size: 11px; 
+    font-weight: 800; 
+    cursor: pointer; 
+    transition: all 0.15s ease-in-out; 
+    box-shadow: 0 2px 0 #047857; 
+}
+.translate-btn-small:hover { 
+    background: linear-gradient(180deg, #fef08a 0%, #fde047 100%); 
+    border-color: #ca8a04; 
+    color: #713f12; 
+    box-shadow: 0 3px 0 #854d0e; 
+    transform: translateY(-1px); 
+}
+.translate-btn-small:active {
+    transform: translateY(1px);
+    box-shadow: 0 0 0 #ca8a04;
+}
+.translation-box { 
+    display: none; 
+    margin-top: 8px; 
+    padding: 8px 12px; 
+    background: #eefdf4; 
+    border: 2px solid #a7f3d0; 
+    border-radius: 10px; 
+    font-size: 13px; 
+    color: #065f46; 
+    font-style: italic; 
+    line-height: 1.35; 
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.05); 
+}
 </style>
 </head>
 <body>
@@ -253,7 +658,11 @@ body { background-color: #122821; font-family: sans-serif; display: flex; justif
 
     <!-- Pastel Chat History -->
     <div id="chat-container">
-        <div class="message bot">Bonjour ! Je suis prêt à t'aider avec ton français.</div>
+        <div class="message bot">
+            <div>Bonjour ! Je suis prêt à t'aider avec ton français.</div>
+            <button class="translate-btn-small" onclick="toggleTranslation(this)">🌐 Translate</button>
+            <div class="translation-box">Hello! I'm ready to help you with your French.</div>
+        </div>
     </div>
 </div>
 
@@ -271,7 +680,6 @@ function playBeep(freq) {
 }
 
 async function onRedButtonClicked() {
-    // Call Python function directly via pywebview bridge
     let res = await window.pywebview.api.toggle_record();
     if (res.status === 'listening') {
         playBeep(880);
@@ -293,12 +701,47 @@ function setBMOState(state) {
     else if (state === 'speaking') mouth.classList.add('speaking');
 }
 
-function appendChatMessage(sender, text) {
+function toggleTranslation(btn) {
+    const box = btn.nextElementSibling;
+    if (box.style.display === 'none' || !box.style.display) {
+        box.style.display = 'block';
+        btn.innerText = '🙈 Hide';
+    } else {
+        box.style.display = 'none';
+        btn.innerText = '🌐 Translate';
+    }
+}
+
+function appendChatMessage(sender, text, translation = '') {
     const container = document.getElementById('chat-container');
-    const div = document.createElement('div');
-    div.className = 'message ' + sender;
-    div.innerText = text;
-    container.appendChild(div);
+    if (sender === 'user') {
+        const div = document.createElement('div');
+        div.className = 'message user';
+        div.innerText = text;
+        container.appendChild(div);
+    } else {
+        const div = document.createElement('div');
+        div.className = 'message bot';
+        
+        const textDiv = document.createElement('div');
+        textDiv.innerText = text;
+        div.appendChild(textDiv);
+
+        if (!translation) translation = text;
+        
+        const btn = document.createElement('button');
+        btn.className = 'translate-btn-small';
+        btn.innerText = '🌐 Translate';
+        btn.onclick = function() { toggleTranslation(btn); };
+        
+        const transBox = document.createElement('div');
+        transBox.className = 'translation-box';
+        transBox.innerText = translation;
+        
+        div.appendChild(btn);
+        div.appendChild(transBox);
+        container.appendChild(div);
+    }
     container.scrollTop = container.scrollHeight;
 }
 </script>

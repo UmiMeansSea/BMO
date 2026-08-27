@@ -1,11 +1,17 @@
 import sys
 import os
+import re
 from pathlib import Path
 import numpy as np
 import scipy.io.wavfile as wav
 import scipy.signal
 import sounddevice as sd
 import traceback
+
+def normalize_bmo_name(text: str) -> str:
+    """Normalize any spoken phonetic variation of BMO's name to 'BMO'."""
+    pattern = re.compile(r"\b(beemo|bemo|bimo|bi\s+mo|b\.m\.o\.|beemow|bémos|beemoo)\b", re.IGNORECASE)
+    return pattern.sub("BMO", text)
 
 try:
     import gradio as gr
@@ -72,7 +78,19 @@ try:
 except Exception as e:
     print(f"[CRITICAL] Failed to access microphone: {e}")
 
-BMO_SYSTEM_PROMPT = "You are BMO (pronounced Beemo), an encouraging French tutor. Keep sentences short. Ask only ONE simple follow-up question. Use the sandwich method for corrections."
+BMO_SYSTEM_PROMPT = """Tu es BMO (prononcé Beemo), un tuteur de français chaleureux et encourageant pour un débutant.
+
+RÈGLES STRICTES:
+1. RECONNAISSANCE DE TON NOM: Ton nom est BMO (prononcé Beemo). L'utilisateur peut t'appeler BMO, Beemo, Bemo ou Bi Mo. Quand l'utilisateur prononce ton nom ou te salue avec ton nom (ex: "BMO", "Salut BMO", "Hey Beemo"), reconnais immédiatement qu'il s'adresse à toi avec enthousiasme (ex: "Oui ! C'est moi BMO !" ou "Coucou ! Je suis BMO !").
+2. LANGUE EXCLUSIVE: Réponds TOUJOURS et UNIQUEMENT en français. Ne parle jamais en anglais dans ta réponse principale.
+3. CORRECTION D'ACCENT ET DE PRONONCIATION: Lorsque l'utilisateur parle français avec un mauvais accent, une mauvaise prononciation ou une faute phonétique, NE CORRIGE PAS AUTOMATIQUEMENT son texte pour prétendre qu'il a dit autre chose. Identifie le mot ou le son mal prononcé, explique l'erreur en français, donne la bonne forme/prononciation française, et demande-lui de répéter.
+4. MÉTHODE DU SANDWICH: Pour les erreurs de grammaire ou de conjugaison, félicite l'effort en français, explique l'erreur en français, donne la bonne phrase française, et demande de la répéter.
+5. SIMPLICITÉ & CONVERSATION: Des phrases courtes (niveau A2/B1). Termine TOUJOURS par UNE question simple.
+
+FORMAT DE SORTIE REQUIS:
+Fournis ta réponse sous cette forme exacte avec deux balises :
+FR: <Ta réponse en français>
+EN: <The exact English translation of your French response>"""
 
 css_styles = """
 #bmo-container { background-color: #3ca993; width: 400px; height: 520px; border: 4px solid #000; border-radius: 20px; position: relative; margin: 0 auto; }
@@ -239,22 +257,37 @@ def bmo_hardware_controller(history_data):
             audio_data = np.concatenate(AUDIO_BUFFER, axis=0).flatten()
             AUDIO_BUFFER.clear()
             
-            # 2. Whisper ASR
-            result = whisper_model.transcribe(audio_data, language="fr", fp16=False)
-            user_text = result.get("text", "").strip() or "Bonjour BMO!"
+            # 2. French-Only Whisper ASR
+            result = whisper_model.transcribe(
+                audio_data, 
+                language="fr", 
+                initial_prompt="Le nom du robot est BMO (prononcé Beemo). Transcription exacte du français parlé. BMO, Beemo, Bemo. Conserver les erreurs de prononciation sans les corriger.",
+                fp16=False
+            )
+            raw_text = result.get("text", "").strip() or "Bonjour BMO!"
+            user_text = normalize_bmo_name(raw_text)
+
+            # 3. Qwen LLM
+            llm_msgs = [{"role": "system", "content": BMO_SYSTEM_PROMPT}] + history_data["turns"][-4:] + [{"role": "user", "content": user_text}]
+            if has_llm:
+                full_resp = llm.create_chat_completion(messages=llm_msgs, max_tokens=150)["choices"][0]["message"]["content"]
+            else:
+                full_resp = f"FR: J'ai entendu : '{user_text}'. Comment ça va ?\nEN: I heard: '{user_text}'. How are you?"
+
+            if "EN:" in full_resp:
+                parts = full_resp.split("EN:")
+                bmo_text = parts[0].replace("FR:", "").strip()
+            else:
+                bmo_text = full_resp.replace("FR:", "").strip()
+
+            bmo_text = bmo_text.replace("BMO", "Beemo")
+
             print(f"  -> User: {user_text}")
             history_data["turns"].append({"role": "user", "content": user_text})
             messages.append({"role": "user", "content": user_text})
             
             yield None, "thinking:65:Brain: Generating Output...", messages, history_data
             
-            # 3. Qwen LLM
-            llm_msgs = [{"role": "system", "content": BMO_SYSTEM_PROMPT}] + history_data["turns"][-4:]
-            if has_llm:
-                bmo_text = llm.create_chat_completion(messages=llm_msgs, max_tokens=60)["choices"][0]["message"]["content"]
-            else:
-                bmo_text = f"J'ai entendu : '{user_text}'."
-            bmo_text = bmo_text.replace("BMO", "Beemo")
             print(f"  -> BMO: {bmo_text}")
             
             history_data["turns"].append({"role": "assistant", "content": bmo_text})

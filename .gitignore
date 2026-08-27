@@ -3,13 +3,19 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# PyInstaller Build Output
+dist/
+build/
+*.spec
+
 # Local environment / dependencies
 .venv/
 venv/
 ENV/
 env/
 
-# Model GGUF binaries and large cache directories
+# Model GGUF binaries and large weights
+models/
 *.gguf
 *.bin
 *.pt
@@ -18,8 +24,14 @@ env/
 pip-cache/
 .cache/
 
-# CodeCarbon temporary outputs
+# CodeCarbon temporary outputs & local temp files
+emmissions.csv
 emissions.csv
+temp_*.mp3
+*.wav
+*.lnk
+*.zip
+session_review.json
 
 # System files
 .DS_Store

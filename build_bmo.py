@@ -33,6 +33,14 @@ def build_bmo():
         "--noconsole",
         "--onedir",
         "--clean",
+        "-y",
+        "--collect-all", "llama_cpp",
+        "--collect-all", "kokoro_onnx",
+        "--collect-all", "language_tags",
+        "--collect-all", "phonemizer",
+        "--collect-all", "whisper",
+        "--collect-all", "segments",
+        "--collect-all", "csvw",
         str(script_path)
     ]
     subprocess.check_call(cmd)
