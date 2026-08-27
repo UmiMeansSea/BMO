@@ -2,9 +2,9 @@
 BMO Live Edge Tutor - High Performance Instant Audio Pipeline & Diagnostic Logging
 =====================================================================================
 Fixes & Upgrades:
-1. Instant Fast Resampling & Fast Pitch Shift (avoid CPU librosa hang).
-2. Diagnostic Console Error Logging (window.bmoLogError) for front-end console.
-3. Robust Push-to-Talk Event Triggering (stop_recording + change fallback).
+1. Added missing scipy.signal import to fix TTS crash.
+2. Removed duplicate event triggers to prevent race conditions.
+3. Added strict try/except blocks to yield errors directly to the UI console.
 """
 
 import sys
@@ -12,13 +12,16 @@ import os
 from pathlib import Path
 import numpy as np
 import scipy.io.wavfile as wav
+import scipy.signal # FIXED: Added missing import
 from io import BytesIO
+import traceback
 
 try:
     import gradio as gr
     import whisper
     from llama_cpp import Llama
     from gtts import gTTS
+    import soundfile as sf
 except ImportError as e:
     print(f"[!] Missing dependency: {e}")
     sys.exit(1)
@@ -56,54 +59,42 @@ css_styles = """
 .bmo-eye { background: #000; width: 16px; height: 16px; border-radius: 50%; position: absolute; top: 35%; animation: blink 4s infinite; }
 .bmo-eye.left { left: 25%; } .bmo-eye.right { right: 25%; }
 @keyframes blink { 0%, 96%, 98%, 100% { transform: scaleY(1); } 97% { transform: scaleY(0.1); } }
-
 .bmo-mouth { position: absolute; top: 50%; left: 50%; transform: translateX(-50%); width: 65px; height: 32px; border: 4px solid #000; border-top: transparent; border-left: transparent; border-right: transparent; border-radius: 0 0 50px 50px; transition: all 0.15s ease; }
 
-/* --- STATE 2: LISTENING (Animated Sound Waveform) --- */
+/* --- STATE 2: LISTENING --- */
 .bmo-waveform { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 220px; height: 80px; align-items: center; justify-content: space-between; }
 .bmo-screen.listening { background-color: #0b1f17; }
 .bmo-screen.listening .bmo-eye, .bmo-screen.listening .bmo-mouth { display: none; }
 .bmo-screen.listening .bmo-waveform { display: flex; }
-
 .wave-bar { width: 10px; background: #33ff99; border-radius: 5px; animation: wave-anim 0.6s infinite alternate ease-in-out; }
-.wave-bar:nth-child(1) { height: 30px; animation-delay: 0.1s; }
-.wave-bar:nth-child(2) { height: 60px; animation-delay: 0.3s; }
-.wave-bar:nth-child(3) { height: 40px; animation-delay: 0.2s; }
-.wave-bar:nth-child(4) { height: 75px; animation-delay: 0.4s; }
-.wave-bar:nth-child(5) { height: 50px; animation-delay: 0.15s; }
-.wave-bar:nth-child(6) { height: 65px; animation-delay: 0.35s; }
+.wave-bar:nth-child(1) { height: 30px; animation-delay: 0.1s; } .wave-bar:nth-child(2) { height: 60px; animation-delay: 0.3s; }
+.wave-bar:nth-child(3) { height: 40px; animation-delay: 0.2s; } .wave-bar:nth-child(4) { height: 75px; animation-delay: 0.4s; }
+.wave-bar:nth-child(5) { height: 50px; animation-delay: 0.15s; } .wave-bar:nth-child(6) { height: 65px; animation-delay: 0.35s; }
 .wave-bar:nth-child(7) { height: 35px; animation-delay: 0.25s; }
-
 @keyframes wave-anim { 0% { transform: scaleY(0.3); background: #33ff99; } 100% { transform: scaleY(1.3); background: #66ffff; } }
 
-/* --- STATE 3: THINKING (Pixel Grid Spinner + Progress Bar + %) --- */
+/* --- STATE 3: THINKING --- */
 .bmo-thinking-box { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); flex-direction: column; align-items: center; justify-content: center; width: 85%; }
 .bmo-thinking-grid { display: grid; width: 70px; height: 70px; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
 .bmo-screen.thinking { background-color: #1a4237; }
 .bmo-screen.thinking .bmo-eye, .bmo-screen.thinking .bmo-mouth, .bmo-screen.thinking .bmo-waveform { display: none; }
 .bmo-screen.thinking .bmo-thinking-box { display: flex; }
-
 .grid-dot { background: #ffcc00; border-radius: 4px; animation: dot-pulse 0.8s infinite alternate; }
-.grid-dot:nth-child(1) { animation-delay: 0.0s; }
-.grid-dot:nth-child(2) { animation-delay: 0.2s; }
-.grid-dot:nth-child(3) { animation-delay: 0.4s; }
-.grid-dot:nth-child(4) { animation-delay: 0.6s; }
-.grid-dot:nth-child(5) { animation-delay: 0.8s; }
-.grid-dot:nth-child(6) { animation-delay: 0.4s; }
-.grid-dot:nth-child(7) { animation-delay: 0.2s; }
-.grid-dot:nth-child(8) { animation-delay: 0.6s; }
+.grid-dot:nth-child(1) { animation-delay: 0.0s; } .grid-dot:nth-child(2) { animation-delay: 0.2s; }
+.grid-dot:nth-child(3) { animation-delay: 0.4s; } .grid-dot:nth-child(4) { animation-delay: 0.6s; }
+.grid-dot:nth-child(5) { animation-delay: 0.8s; } .grid-dot:nth-child(6) { animation-delay: 0.4s; }
+.grid-dot:nth-child(7) { animation-delay: 0.2s; } .grid-dot:nth-child(8) { animation-delay: 0.6s; }
 .grid-dot:nth-child(9) { animation-delay: 0.0s; }
-
 @keyframes dot-pulse { 0% { opacity: 0.2; transform: scale(0.8); } 100% { opacity: 1; transform: scale(1.1); background: #ff5500; } }
-
 .bmo-progress-container { width: 100%; background: #0c211b; border: 2px solid #000; border-radius: 10px; height: 16px; position: relative; overflow: hidden; }
 .bmo-progress-fill { background: linear-gradient(90deg, #33ff99, #66ffff); width: 0%; height: 100%; transition: width 0.2s ease-in-out; }
 .bmo-progress-text { font-family: monospace; font-size: 13px; font-weight: bold; color: #ffcc00; margin-top: 5px; text-shadow: 1px 1px 0 #000; }
 
-/* --- STATE 4: SPEAKING (Keyframe Animated Mouth) --- */
+/* --- STATE 4: SPEAKING --- */
 .bmo-mouth.speaking { animation: talk-anim 0.22s infinite alternate ease-in-out; background: #112a20; border: 3px solid #000; }
 @keyframes talk-anim { 0% { height: 12px; width: 35px; border-radius: 20px; top: 58%; } 50% { height: 28px; width: 48px; border-radius: 50% 50% 45% 45%; top: 52%; } 100% { height: 38px; width: 52px; border-radius: 40% 40% 50% 50%; top: 50%; } }
 
+/* Hardware */
 .bmo-slot { position: absolute; background: #112a20; border: 4px solid #000; width: 200px; height: 15px; top: 260px; left: 30px; }
 .bmo-sbc { position: absolute; background: #0000ff; border: 4px solid #000; width: 20px; height: 20px; border-radius: 50%; top: 255px; right: 50px; }
 .bmo-dpad-svg { position: absolute; top: 310px; left: 30px; width: 100px; height: 100px; }
@@ -113,7 +104,7 @@ css_styles = """
 .bmo-rc:active { transform: scale(0.92); }
 .bmo-pill { position: absolute; background: #0000ff; border: 4px solid #000; width: 45px; height: 15px; border-radius: 15px; bottom: 25px; } .bmo-pill.p1 { left: 40px; } .bmo-pill.p2 { left: 105px; }
 
-/* Force Chatbot UI Colors & Cloak Audio Components */
+/* Chat UI */
 .cloak-audio { position: absolute !important; top: -9999px !important; left: -9999px !important; opacity: 0; pointer-events: none; height: 0px !important; }
 .cute-chat, .cute-chat .wrap, .cute-chat .bubble-wrap { background-color: #f4fce8 !important; border-radius: 20px !important; }
 .cute-chat .message * { color: #1a1a1a !important; font-weight: 500 !important; font-size: 16px !important; margin: 0 !important; }
@@ -148,10 +139,7 @@ head_js = """
 
     window.toggleBmoRecord = function() {
         const micContainer = document.getElementById('bmo-mic');
-        if (!micContainer) {
-            console.error('[BMO Error]: #bmo-mic container element not found in DOM!');
-            return;
-        }
+        if (!micContainer) return;
 
         if (!window.isBmoRecording) {
             const recordBtn = micContainer.querySelector('button[aria-label="Record"]') || micContainer.querySelector('button');
@@ -161,8 +149,6 @@ head_js = """
                 window.isBmoRecording = true;
                 window.playBmoBeep(880);
                 window.setBMOState('listening');
-            } else {
-                console.error('[BMO Error]: Record button inside #bmo-mic not found!');
             }
         } else {
             const stopBtn = micContainer.querySelector('button[aria-label="Stop"]') || micContainer.querySelector('button');
@@ -171,10 +157,8 @@ head_js = """
                 stopBtn.click();
                 window.isBmoRecording = false;
                 window.playBmoBeep(440);
-                window.setBMOProgress(20, 'Ears: Listening...');
+                window.setBMOProgress(20, 'System: Triggering Pipeline...');
                 window.setBMOState('thinking');
-            } else {
-                console.error('[BMO Error]: Stop button inside #bmo-mic not found!');
             }
         }
     };
@@ -194,53 +178,38 @@ head_js = """
         screen.className = 'bmo-screen';
         mouth.classList.remove('speaking');
 
-        if (state === 'listening') {
-            screen.classList.add('listening');
-        } else if (state === 'thinking') {
-            screen.classList.add('thinking');
-        } else if (state === 'speaking') {
-            mouth.classList.add('speaking');
-        }
+        if (state === 'listening') { screen.classList.add('listening'); } 
+        else if (state === 'thinking') { screen.classList.add('thinking'); } 
+        else if (state === 'speaking') { mouth.classList.add('speaking'); }
     };
 </script>
 """
 
 bmo_html = f"""
-<style>
-{css_styles}
-</style>
+<style>{css_styles}</style>
 <div id="bmo-container">
     <div id="bmo-screen" class="bmo-screen">
         <div class="bmo-eye left"></div>
         <div class="bmo-eye right"></div>
         <div id="bmo-mouth" class="bmo-mouth"></div>
-
-        <!-- Animated Sound Waveform (Listening) -->
         <div class="bmo-waveform">
             <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
-            <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
-            <div class="wave-bar"></div>
+            <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
         </div>
-
-        <!-- Animated Thinking Box with Progress Bar + % (Thinking) -->
         <div class="bmo-thinking-box">
             <div class="bmo-thinking-grid">
                 <div class="grid-dot"></div><div class="grid-dot"></div><div class="grid-dot"></div>
                 <div class="grid-dot"></div><div class="grid-dot"></div><div class="grid-dot"></div>
                 <div class="grid-dot"></div><div class="grid-dot"></div><div class="grid-dot"></div>
             </div>
-            <div class="bmo-progress-container">
-                <div id="bmo-progress-fill" class="bmo-progress-fill"></div>
-            </div>
+            <div class="bmo-progress-container"><div id="bmo-progress-fill" class="bmo-progress-fill"></div></div>
             <div id="bmo-progress-text" class="bmo-progress-text">0% - Initializing</div>
         </div>
     </div>
-
     <div class="bmo-slot"></div><div class="bmo-sbc"></div>
     <svg class="bmo-dpad-svg" viewBox="0 0 100 100"><path d="M 35 5 L 65 5 L 65 35 L 95 35 L 95 65 L 65 65 L 65 95 L 35 95 L 35 65 L 5 65 L 5 35 L 35 35 Z" fill="#ffcc00" stroke="#000" stroke-width="4" stroke-linejoin="round"/></svg>
     <svg class="bmo-triangle-svg" viewBox="0 0 100 100"><polygon points="50,10 90,90 10,90" fill="#00ccff" stroke="#000" stroke-width="6" stroke-linejoin="round"/></svg>
     <div class="bmo-gc"></div>
-    <!-- Red Hardware Push-to-Talk Toggle -->
     <div class="bmo-rc" onclick="window.toggleBmoRecord()"></div>
     <div class="bmo-pill p1"></div><div class="bmo-pill p2"></div>
 </div>
@@ -252,139 +221,116 @@ def summarize_turns(old_turns: list, current_summary: str) -> str:
         role = "User" if turn.get("role") == "user" else "BMO"
         lines.append(f"{role}: {turn.get('content', '')}")
     turn_text = " | ".join(lines)
-    
-    if current_summary:
-        new_summary = f"{current_summary}; {turn_text}"
-    else:
-        new_summary = f"Summary of past topics: {turn_text}"
-    
-    if len(new_summary) > 250:
-        new_summary = new_summary[-250:]
-    return new_summary
+    new_summary = f"{current_summary}; {turn_text}" if current_summary else f"Summary of past topics: {turn_text}"
+    return new_summary[-250:] if len(new_summary) > 250 else new_summary
 
 def bmo_response_generator(audio_data, history_data):
-    if history_data is None:
-        history_data = {"turns": [], "summary": "", "messages": []}
-
-    turns = history_data.get("turns", [])
-    summary = history_data.get("summary", "")
-    messages = history_data.get("messages", [])
-
-    if audio_data is None:
-        print("[!] bmo_response_generator received None audio_data")
-        yield None, "idle:0:Done", messages, history_data
-        return
-
-    print("\n[*] Processing incoming Push-to-Talk audio stream...")
-    yield None, "thinking:30:Whisper ASR", messages, history_data
-    
-    if isinstance(audio_data, tuple):
-        sr, arr = audio_data
-    else:
-        try:
-            sr, arr = wav.read(audio_data)
-        except Exception as e:
-            print(f"[!] Wav Read Error: {e}")
-            sr, arr = 44100, np.zeros(44100, dtype=np.float32)
-
-    arr = np.asarray(arr, dtype=np.float32)
-    if arr.ndim > 1:
-        arr = arr.mean(axis=1)
-    if np.max(np.abs(arr)) > 1.0:
-        arr = arr / 32768.0
-
-    # Fast numpy downsampling
-    if sr != 16000:
-        step = sr / 16000.0
-        indices = np.arange(0, len(arr), step).astype(int)
-        indices = indices[indices < len(arr)]
-        arr_16k = arr[indices]
-    else:
-        arr_16k = arr
-
-    # 1. Ears: High-fidelity transcription with Whisper 'small'
-    yield None, "thinking:45:Transcribing...", messages, history_data
+    """Wrapped generator to catch errors and yield them dynamically."""
     try:
+        # Step 1: Init pipeline
+        print("\n[*] [PIPELINE START] Processing incoming audio stream...")
+        yield None, "thinking:30:Ears: Reading Audio...", history_data.get("messages", []), history_data
+        
+        if history_data is None:
+            history_data = {"turns": [], "summary": "", "messages": []}
+
+        turns = history_data.get("turns", [])
+        summary = history_data.get("summary", "")
+        messages = history_data.get("messages", [])
+
+        if audio_data is None:
+            print("[!] audio_data is None. Bailing out.")
+            yield None, "idle:0:Awaiting Input", messages, history_data
+            return
+
+        # Extract Tuple Data
+        sr, arr = audio_data
+        print(f"[*] Audio loaded: Sample Rate = {sr}, Shape = {arr.shape}")
+        
+        arr = np.asarray(arr, dtype=np.float32)
+        if arr.ndim > 1:
+            arr = arr.mean(axis=1)
+        if np.max(np.abs(arr)) > 1.0:
+            arr = arr / 32768.0
+
+        if sr != 16000:
+            step = sr / 16000.0
+            indices = np.arange(0, len(arr), step).astype(int)
+            indices = indices[indices < len(arr)]
+            arr_16k = arr[indices]
+        else:
+            arr_16k = arr
+
+        # Step 2: Whisper Transcribe
+        print("[*] [STEP 1/3] Transcribing with Whisper...")
+        yield None, "thinking:45:Ears: Transcribing...", messages, history_data
         result = whisper_model.transcribe(arr_16k, language="fr", fp16=False)
         user_text = result.get("text", "").strip()
-    except Exception as e:
-        print(f"[!] Whisper Error: {e}")
-        user_text = "Bonjour !"
 
-    if not user_text:
-        user_text = "Bonjour !"
-    print(f"  [1/3 Ears] Transcribed: \"{user_text}\"")
+        if not user_text:
+            user_text = "Bonjour BMO!"
+        print(f"  -> Transcribed: \"{user_text}\"")
 
-    turns.append({"role": "user", "content": user_text})
-    messages.append({"role": "user", "content": user_text})
+        turns.append({"role": "user", "content": user_text})
+        messages.append({"role": "user", "content": user_text})
 
-    yield None, "thinking:65:Qwen LLM Thinking...", messages, history_data
+        # Step 3: LLM Generation
+        print("[*] [STEP 2/3] Generating LLM response...")
+        yield None, "thinking:65:Brain: Generating Output...", messages, history_data
 
-    SLIDING_WINDOW_SIZE = 4
-    if len(turns) > SLIDING_WINDOW_SIZE:
-        old_turns = turns[:-SLIDING_WINDOW_SIZE]
-        turns = turns[-SLIDING_WINDOW_SIZE:]
-        summary = summarize_turns(old_turns, summary)
+        SLIDING_WINDOW_SIZE = 4
+        if len(turns) > SLIDING_WINDOW_SIZE:
+            old_turns = turns[:-SLIDING_WINDOW_SIZE]
+            turns = turns[-SLIDING_WINDOW_SIZE:]
+            summary = summarize_turns(old_turns, summary)
 
-    system_prompt_with_summary = BMO_SYSTEM_PROMPT
-    if summary:
-        system_prompt_with_summary += f"\nBACKGROUND MEMORY: {summary}"
+        system_prompt = BMO_SYSTEM_PROMPT
+        if summary:
+            system_prompt += f"\nBACKGROUND MEMORY: {summary}"
 
-    llm_messages = [{"role": "system", "content": system_prompt_with_summary}] + turns
+        llm_messages = [{"role": "system", "content": system_prompt}] + turns
 
-    # 2. Brain: Generate Pedagogical Response with Qwen LLM
-    if has_llm:
-        try:
-            response = llm.create_chat_completion(
-                messages=llm_messages,
-                max_tokens=60
-            )
+        if has_llm:
+            response = llm.create_chat_completion(messages=llm_messages, max_tokens=60)
             bmo_text = response["choices"][0]["message"]["content"]
-        except Exception as e:
-            print(f"[!] LLM Error: {e}")
-            bmo_text = f"Salut ! J'ai entendu : '{user_text}'."
-    else:
-        bmo_text = f"Salut ! J'ai bien entendu : '{user_text}'. C'est une très bonne phrase !"
-    
-    bmo_text = bmo_text.replace("BMO", "Beemo")
-    print(f"  [2/3 Brain] BMO generated: \"{bmo_text}\"")
+        else:
+            bmo_text = f"Salut ! J'ai bien entendu : '{user_text}'."
+        
+        bmo_text = bmo_text.replace("BMO", "Beemo")
+        print(f"  -> Generated: \"{bmo_text}\"")
 
-    turns.append({"role": "assistant", "content": bmo_text})
-    messages.append({"role": "assistant", "content": bmo_text})
+        turns.append({"role": "assistant", "content": bmo_text})
+        messages.append({"role": "assistant", "content": bmo_text})
+        history_data = {"turns": turns, "summary": summary, "messages": messages}
 
-    history_data = {"turns": turns, "summary": summary, "messages": messages}
+        # Step 4: TTS & Pitch Shift
+        print("[*] [STEP 3/3] Synthesizing audio...")
+        yield None, "thinking:85:Voice: Pitch Shifting...", messages, history_data
 
-    yield None, "thinking:85:Cartoon Speech DSP...", messages, history_data
-
-    # 3. Voice & Fast Synthesis
-    print("  [3/3 Voice] Synthesizing French speech...")
-    out_wav = "bmo_live_response.wav"
-    try:
+        out_wav = "bmo_live_response.wav"
         tts = gTTS(text=bmo_text, lang='fr', slow=False)
-        temp_mp3 = "temp_bmo_gtts.mp3"
-        tts.save(temp_mp3)
+        tts.save("temp_bmo_gtts.mp3")
 
-        import soundfile as sf
-        samples_raw, sr_out = sf.read(temp_mp3)
+        samples_raw, sr_out = sf.read("temp_bmo_gtts.mp3")
         if samples_raw.ndim > 1:
             samples_raw = samples_raw.mean(axis=1)
 
-        # Fast pitch shifting using scipy resample + speed compensation
-        # Shifting pitch up +4 semitones (factor ~1.26)
+        # Apply SciPy Pitch Shift (previously caused the silent crash)
         pitch_factor = 1.2599
         new_len = int(len(samples_raw) / pitch_factor)
         samples_shifted = scipy.signal.resample(samples_raw, new_len).astype(np.float32)
-
         samples_int16 = (samples_shifted * 32767).astype(np.int16)
         wav.write(out_wav, sr_out, samples_int16)
-    except Exception as e:
-        print(f"[!] TTS Error: {e}")
-        sr_out = 24000
-        t = np.linspace(0, 1.5, int(24000 * 1.5), False)
-        tone = np.sin(2 * np.pi * 520 * t) * 0.3
-        wav.write(out_wav, sr_out, (tone * 32767).astype(np.int16))
 
-    yield out_wav, "speaking:100:BMO Speaking!", messages, history_data
+        print("[*] [PIPELINE COMPLETE] Yielding audio to frontend.")
+        yield out_wav, "speaking:100:BMO Speaking!", messages, history_data
+
+    except Exception as e:
+        error_trace = traceback.format_exc()
+        print(f"\n[CRITICAL PIPELINE ERROR]\n{error_trace}")
+        # Yield the error directly to the BMO screen so you don't have to guess why it stuck
+        yield None, f"idle:0:Error - Check Console", history_data.get("messages", []), history_data
+
 
 with gr.Blocks(head=head_js) as demo:
     gr.Markdown("<h1 style='text-align: center; color: #3ca993;'>🤖 BMO Live Edge Tutor</h1>")
@@ -401,38 +347,28 @@ with gr.Blocks(head=head_js) as demo:
                 audio_input = gr.Audio(sources=["microphone"], type="numpy", elem_id="bmo-mic")
                 bmo_voice = gr.Audio(autoplay=True)
 
-    # Attach both stop_recording AND change event for robust triggers
+    # FIXED: Only use stop_recording to prevent double-firing race conditions.
     audio_input.stop_recording(
         fn=bmo_response_generator,
         inputs=[audio_input, chat_memory],
         outputs=[bmo_voice, bmo_state, chatbot, chat_memory]
     )
-    audio_input.change(
-        fn=bmo_response_generator,
-        inputs=[audio_input, chat_memory],
-        outputs=[bmo_voice, bmo_state, chatbot, chat_memory]
-    )
 
-    # Auto-Reset: Return to normal idle face once speech finishes
     bmo_voice.stop(
-        fn=lambda: "idle:0:Done",
+        fn=lambda: "idle:0:Ready",
         inputs=[],
         outputs=[bmo_state]
     )
 
-    # JS State & Progress Parser
     bmo_state.change(
         fn=None,
         inputs=[bmo_state],
         js="""(stateStr) => {
             if (!stateStr) return;
-            window.bmoLog('State updated: ' + stateStr);
+            window.bmoLog('State transitioned to: ' + stateStr);
             const parts = stateStr.split(':');
-            const state = parts[0] || 'idle';
-            const percent = parts[1] || '0';
-            const label = parts[2] || '';
-            window.setBMOState(state);
-            window.setBMOProgress(percent, label);
+            window.setBMOState(parts[0] || 'idle');
+            window.setBMOProgress(parts[1] || '0', parts[2] || '');
         }"""
     )
 
