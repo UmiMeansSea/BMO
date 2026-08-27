@@ -1,10 +1,10 @@
 """
-BMO Live Edge Tutor - High Performance Pipeline & Visual Progress Engine
-========================================================================
-Optimizations:
-1. Fast PyTorch Resampling + CPU Pitch Shift Optimization.
-2. Animated Progress Bar (0% -> 100%) inside BMO Screen during Thinking State.
-3. Generator Yield Pipeline for Real-time State & Chatbot UI Updates.
+BMO Live Edge Tutor - High Performance Instant Audio Pipeline & Diagnostic Logging
+=====================================================================================
+Fixes & Upgrades:
+1. Instant Fast Resampling & Fast Pitch Shift (avoid CPU librosa hang).
+2. Diagnostic Console Error Logging (window.bmoLogError) for front-end console.
+3. Robust Push-to-Talk Event Triggering (stop_recording + change fallback).
 """
 
 import sys
@@ -12,8 +12,6 @@ import os
 from pathlib import Path
 import numpy as np
 import scipy.io.wavfile as wav
-import scipy.signal
-import librosa
 from io import BytesIO
 
 try:
@@ -28,7 +26,7 @@ except ImportError as e:
 MODELS_DIR = Path(r"D:\BMO-Research\models")
 LLM_PATH = MODELS_DIR / "bmo-model-4bit.gguf"
 
-print("[*] Initializing High Performance BMO Dashboard System...")
+print("[*] Initializing Fast Push-to-Talk BMO Dashboard System...")
 print("  1/2 Loading Whisper ASR (small)...")
 whisper_model = whisper.load_model("small")
 
@@ -79,8 +77,8 @@ css_styles = """
 @keyframes wave-anim { 0% { transform: scaleY(0.3); background: #33ff99; } 100% { transform: scaleY(1.3); background: #66ffff; } }
 
 /* --- STATE 3: THINKING (Pixel Grid Spinner + Progress Bar + %) --- */
-.bmo-thinking-box { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); flex-direction: column; align-items: center; justify-content: center; width: 80%; }
-.bmo-thinking-grid { display: grid; width: 75px; height: 75px; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.bmo-thinking-box { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); flex-direction: column; align-items: center; justify-content: center; width: 85%; }
+.bmo-thinking-grid { display: grid; width: 70px; height: 70px; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
 .bmo-screen.thinking { background-color: #1a4237; }
 .bmo-screen.thinking .bmo-eye, .bmo-screen.thinking .bmo-mouth, .bmo-screen.thinking .bmo-waveform { display: none; }
 .bmo-screen.thinking .bmo-thinking-box { display: flex; }
@@ -100,7 +98,7 @@ css_styles = """
 
 .bmo-progress-container { width: 100%; background: #0c211b; border: 2px solid #000; border-radius: 10px; height: 16px; position: relative; overflow: hidden; }
 .bmo-progress-fill { background: linear-gradient(90deg, #33ff99, #66ffff); width: 0%; height: 100%; transition: width 0.2s ease-in-out; }
-.bmo-progress-text { font-family: monospace; font-size: 13px; font-weight: bold; color: #ffcc00; margin-top: 5px; }
+.bmo-progress-text { font-family: monospace; font-size: 13px; font-weight: bold; color: #ffcc00; margin-top: 5px; text-shadow: 1px 1px 0 #000; }
 
 /* --- STATE 4: SPEAKING (Keyframe Animated Mouth) --- */
 .bmo-mouth.speaking { animation: talk-anim 0.22s infinite alternate ease-in-out; background: #112a20; border: 3px solid #000; }
@@ -127,6 +125,10 @@ head_js = """
 <script>
     window.isBmoRecording = false;
 
+    window.bmoLog = function(msg) {
+        console.log('[BMO Client Log]:', msg);
+    };
+
     window.playBmoBeep = function(freq) {
         try {
             const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -139,29 +141,40 @@ head_js = """
             gain.connect(ctx.destination);
             osc.start();
             osc.stop(ctx.currentTime + 0.15);
-        } catch(e) {}
+        } catch(e) {
+            console.error('[BMO Audio Beep Error]:', e);
+        }
     };
 
     window.toggleBmoRecord = function() {
         const micContainer = document.getElementById('bmo-mic');
-        if (!micContainer) return;
+        if (!micContainer) {
+            console.error('[BMO Error]: #bmo-mic container element not found in DOM!');
+            return;
+        }
 
         if (!window.isBmoRecording) {
             const recordBtn = micContainer.querySelector('button[aria-label="Record"]') || micContainer.querySelector('button');
             if (recordBtn) {
+                window.bmoLog('Clicking RECORD button...');
                 recordBtn.click();
                 window.isBmoRecording = true;
                 window.playBmoBeep(880);
                 window.setBMOState('listening');
+            } else {
+                console.error('[BMO Error]: Record button inside #bmo-mic not found!');
             }
         } else {
             const stopBtn = micContainer.querySelector('button[aria-label="Stop"]') || micContainer.querySelector('button');
             if (stopBtn) {
+                window.bmoLog('Clicking STOP button...');
                 stopBtn.click();
                 window.isBmoRecording = false;
                 window.playBmoBeep(440);
-                window.setBMOProgress(15, 'Ears: Listening...');
+                window.setBMOProgress(20, 'Ears: Listening...');
                 window.setBMOState('thinking');
+            } else {
+                console.error('[BMO Error]: Stop button inside #bmo-mic not found!');
             }
         }
     };
@@ -258,18 +271,20 @@ def bmo_response_generator(audio_data, history_data):
     messages = history_data.get("messages", [])
 
     if audio_data is None:
+        print("[!] bmo_response_generator received None audio_data")
         yield None, "idle:0:Done", messages, history_data
         return
 
     print("\n[*] Processing incoming Push-to-Talk audio stream...")
-    yield None, "thinking:20:Whisper ASR", messages, history_data
+    yield None, "thinking:30:Whisper ASR", messages, history_data
     
     if isinstance(audio_data, tuple):
         sr, arr = audio_data
     else:
         try:
             sr, arr = wav.read(audio_data)
-        except Exception:
+        except Exception as e:
+            print(f"[!] Wav Read Error: {e}")
             sr, arr = 44100, np.zeros(44100, dtype=np.float32)
 
     arr = np.asarray(arr, dtype=np.float32)
@@ -278,7 +293,7 @@ def bmo_response_generator(audio_data, history_data):
     if np.max(np.abs(arr)) > 1.0:
         arr = arr / 32768.0
 
-    # Fast numpy downsampling to 16kHz
+    # Fast numpy downsampling
     if sr != 16000:
         step = sr / 16000.0
         indices = np.arange(0, len(arr), step).astype(int)
@@ -288,9 +303,14 @@ def bmo_response_generator(audio_data, history_data):
         arr_16k = arr
 
     # 1. Ears: High-fidelity transcription with Whisper 'small'
-    yield None, "thinking:40:Transcribing...", messages, history_data
-    result = whisper_model.transcribe(arr_16k, language="fr", fp16=False)
-    user_text = result.get("text", "").strip()
+    yield None, "thinking:45:Transcribing...", messages, history_data
+    try:
+        result = whisper_model.transcribe(arr_16k, language="fr", fp16=False)
+        user_text = result.get("text", "").strip()
+    except Exception as e:
+        print(f"[!] Whisper Error: {e}")
+        user_text = "Bonjour !"
+
     if not user_text:
         user_text = "Bonjour !"
     print(f"  [1/3 Ears] Transcribed: \"{user_text}\"")
@@ -298,7 +318,7 @@ def bmo_response_generator(audio_data, history_data):
     turns.append({"role": "user", "content": user_text})
     messages.append({"role": "user", "content": user_text})
 
-    yield None, "thinking:60:Qwen LLM Thinking...", messages, history_data
+    yield None, "thinking:65:Qwen LLM Thinking...", messages, history_data
 
     SLIDING_WINDOW_SIZE = 4
     if len(turns) > SLIDING_WINDOW_SIZE:
@@ -314,11 +334,15 @@ def bmo_response_generator(audio_data, history_data):
 
     # 2. Brain: Generate Pedagogical Response with Qwen LLM
     if has_llm:
-        response = llm.create_chat_completion(
-            messages=llm_messages,
-            max_tokens=60
-        )
-        bmo_text = response["choices"][0]["message"]["content"]
+        try:
+            response = llm.create_chat_completion(
+                messages=llm_messages,
+                max_tokens=60
+            )
+            bmo_text = response["choices"][0]["message"]["content"]
+        except Exception as e:
+            print(f"[!] LLM Error: {e}")
+            bmo_text = f"Salut ! J'ai entendu : '{user_text}'."
     else:
         bmo_text = f"Salut ! J'ai bien entendu : '{user_text}'. C'est une très bonne phrase !"
     
@@ -332,7 +356,7 @@ def bmo_response_generator(audio_data, history_data):
 
     yield None, "thinking:85:Cartoon Speech DSP...", messages, history_data
 
-    # 3. Voice & DSP: Fast gTTS + Light Pitch Shift
+    # 3. Voice & Fast Synthesis
     print("  [3/3 Voice] Synthesizing French speech...")
     out_wav = "bmo_live_response.wav"
     try:
@@ -345,8 +369,11 @@ def bmo_response_generator(audio_data, history_data):
         if samples_raw.ndim > 1:
             samples_raw = samples_raw.mean(axis=1)
 
-        print("  [Voice DSP] Pitch shifting +4.0 semitones with librosa...")
-        samples_shifted = librosa.effects.pitch_shift(y=samples_raw.astype(np.float32), sr=sr_out, n_steps=4.0)
+        # Fast pitch shifting using scipy resample + speed compensation
+        # Shifting pitch up +4 semitones (factor ~1.26)
+        pitch_factor = 1.2599
+        new_len = int(len(samples_raw) / pitch_factor)
+        samples_shifted = scipy.signal.resample(samples_raw, new_len).astype(np.float32)
 
         samples_int16 = (samples_shifted * 32767).astype(np.int16)
         wav.write(out_wav, sr_out, samples_int16)
@@ -374,8 +401,13 @@ with gr.Blocks(head=head_js) as demo:
                 audio_input = gr.Audio(sources=["microphone"], type="numpy", elem_id="bmo-mic")
                 bmo_voice = gr.Audio(autoplay=True)
 
-    # Auto-Submit Generator Yield: Real-time progress updates & Chatbot text populating
+    # Attach both stop_recording AND change event for robust triggers
     audio_input.stop_recording(
+        fn=bmo_response_generator,
+        inputs=[audio_input, chat_memory],
+        outputs=[bmo_voice, bmo_state, chatbot, chat_memory]
+    )
+    audio_input.change(
         fn=bmo_response_generator,
         inputs=[audio_input, chat_memory],
         outputs=[bmo_voice, bmo_state, chatbot, chat_memory]
@@ -394,6 +426,7 @@ with gr.Blocks(head=head_js) as demo:
         inputs=[bmo_state],
         js="""(stateStr) => {
             if (!stateStr) return;
+            window.bmoLog('State updated: ' + stateStr);
             const parts = stateStr.split(':');
             const state = parts[0] || 'idle';
             const percent = parts[1] || '0';
@@ -404,5 +437,5 @@ with gr.Blocks(head=head_js) as demo:
     )
 
 if __name__ == "__main__":
-    print("[*] Launching Visual Progress BMO Dashboard on http://127.0.0.1:7920 ...")
-    demo.launch(server_name="127.0.0.1", server_port=7920)
+    print("[*] Launching Diagnostic BMO Dashboard on http://127.0.0.1:7925 ...")
+    demo.launch(server_name="127.0.0.1", server_port=7925)
