@@ -16,6 +16,25 @@ except ImportError as e:
     print(f"[!] Missing dependency: {e}")
     sys.exit(1)
 
+# Patch Kokoro speed data type issue
+def _patched_create_audio(self, phonemes, voice, speed):
+    tokens = np.array(self.tokenizer.tokenize(phonemes[:510]), dtype=np.int64)
+    voice_style = voice[len(tokens)]
+    tokens_input = [[0, *tokens, 0]]
+    inputs = {
+        "input_ids": tokens_input,
+        "style": np.array(voice_style, dtype=np.float32),
+        "speed": np.array([speed], dtype=np.float32),
+    }
+    audio = self.sess.run(None, inputs)[0]
+    return audio, 24000
+
+try:
+    from kokoro_onnx import Kokoro
+    Kokoro._create_audio = _patched_create_audio
+except ImportError:
+    pass
+
 MODELS_DIR = Path(r"D:\BMO-Research\models")
 LLM_PATH = MODELS_DIR / "bmo-model-4bit.gguf"
 KOKORO_MODEL = MODELS_DIR / "kokoro-v1.0.onnx"
@@ -243,21 +262,35 @@ def bmo_hardware_controller(history_data):
             
             yield None, "thinking:85:Voice: Synthesizing...", messages, history_data
 
-            # 4. Kokoro TTS & Pitch Shift
-            out_wav = "bmo_live_response.wav"
+            # 4. Kokoro TTS & Native Hardware Playback
             if kokoro:
                 try:
                     audio, sr_out = kokoro.create(bmo_text, voice="ff_siwis", speed=1.15, lang="fr-fr")
-                    audio_flat = audio.squeeze()
-                    pitch_factor = 1.2599
-                    new_len = int(len(audio_flat) / pitch_factor)
-                    samples_shifted = scipy.signal.resample(audio_flat, new_len).astype(np.float32)
-                    wav.write(out_wav, sr_out, (samples_shifted * 32767).astype(np.int16))
                 except Exception as e:
-                    print(f"[!] Kokoro synthesize notice: {e}")
-                    kokoro = None
+                    print(f"[!] Primary voice failed, falling back: {e}")
+                    audio, sr_out = kokoro.create(bmo_text, voice="af_bella", speed=1.15)
 
-            if not kokoro:
+                audio_flat = audio.squeeze()
+
+                # Cartoon DSP Shift
+                pitch_factor = 1.2599
+                new_len = int(len(audio_flat) / pitch_factor)
+                samples_shifted = scipy.signal.resample(audio_flat, new_len).astype(np.float32)
+
+                # Yield speaking state FIRST so the UI mouth animates instantly
+                yield None, "speaking:100:BMO Speaking!", messages, history_data
+
+                # Play directly through OS hardware speakers (bypasses browser autoplay blocks)
+                import time
+                sd.play(samples_shifted, sr_out)
+
+                # Calculate audio length and keep mouth moving while audio is physically playing
+                duration = len(samples_shifted) / sr_out
+                time.sleep(duration)
+
+                # Audio physically finished playing, return to idle
+                yield None, "idle:0:Ready", messages, history_data
+            else:
                 from gtts import gTTS
                 tts = gTTS(text=bmo_text, lang='fr', slow=False)
                 tts.save("temp_bmo_gtts.mp3")
@@ -268,9 +301,13 @@ def bmo_hardware_controller(history_data):
                 pitch_factor = 1.2599
                 new_len = int(len(samples_raw) / pitch_factor)
                 samples_shifted = scipy.signal.resample(samples_raw, new_len).astype(np.float32)
-                wav.write(out_wav, sr_out, (samples_shifted * 32767).astype(np.int16))
-            
-            yield out_wav, "speaking:100:BMO Speaking!", messages, history_data
+
+                yield None, "speaking:100:BMO Speaking!", messages, history_data
+                import time
+                sd.play(samples_shifted, sr_out)
+                duration = len(samples_shifted) / sr_out
+                time.sleep(duration)
+                yield None, "idle:0:Ready", messages, history_data
 
     except Exception as e:
         print(f"\n[CRITICAL ERROR]\n{traceback.format_exc()}")
