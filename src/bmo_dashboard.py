@@ -1,10 +1,10 @@
 """
-BMO Gradio Dashboard & Live Voice DSP Engine
-============================================
-Interactive animated BMO chassis with cartoon voice pitch-shifting:
-- Kokoro ONNX TTS + librosa pitch shifting (+4 semitones, 1.15x speed).
-- PyTorch Whisper ASR.
-- State-driven animated UI.
+BMO Gradio Dashboard - Complete Integrated System
+=================================================
+Combines:
+1. Animated State Machine UI (Idle, Listening, Thinking, Speaking).
+2. Live Voice Pipeline (PyTorch Whisper ASR + Qwen LLM + Kokoro TTS).
+3. DSP Cartoon Voice Timbre (+4.0 semitone pitch shift & 1.15x speed).
 """
 
 import sys
@@ -17,6 +17,7 @@ import librosa
 try:
     import gradio as gr
     import whisper
+    from llama_cpp import Llama
     from kokoro_onnx import Kokoro
 except ImportError as e:
     print(f"[!] Missing dependency: {e}")
@@ -38,32 +39,42 @@ def _patched_create_audio(self, phonemes, voice, speed):
 Kokoro._create_audio = _patched_create_audio
 
 MODELS_DIR = Path(r"D:\BMO-Research\models")
+LLM_PATH = MODELS_DIR / "bmo-model-4bit.gguf"
 KOKORO_MODEL = MODELS_DIR / "kokoro-v1.0.onnx"
 KOKORO_VOICES = MODELS_DIR / "voices-v1.0.bin"
 
-print("[*] Initializing global ML models for BMO Cartoon Voice Dashboard...")
-print("  1/2 Loading PyTorch Whisper ASR (tiny)...")
+print("[*] Initializing complete integrated BMO system...")
+print("  1/3 Loading Whisper ASR (tiny)...")
 whisper_model = whisper.load_model("tiny")
 
-print(f"  2/2 Loading Kokoro TTS ({KOKORO_MODEL.name})...")
+print(f"  2/3 Loading Qwen LLM ({LLM_PATH.name})...")
+try:
+    llm = Llama(model_path=str(LLM_PATH), n_ctx=256, n_batch=32, n_threads=4, n_gpu_layers=0, verbose=False)
+    has_llm = True
+except Exception as e:
+    print(f"[!] LLM load notice: {e}")
+    has_llm = False
+
+print(f"  3/3 Loading Kokoro TTS ({KOKORO_MODEL.name})...")
 try:
     kokoro = Kokoro(str(KOKORO_MODEL), str(KOKORO_VOICES))
     has_kokoro = True
 except Exception as e:
-    print(f"[!] Kokoro load warning: {e}")
+    print(f"[!] Kokoro load notice: {e}")
     has_kokoro = False
-print("[OK] Models initialized successfully!\n")
+
+print("[OK] Integrated BMO pipeline initialized!\n")
 
 css_styles = """
 #bmo-container { background-color: #3ca993; width: 400px; height: 520px; border: 4px solid #000; border-radius: 20px; position: relative; margin: 0 auto; }
 .bmo-screen { background-color: #b7efcc; width: 350px; height: 220px; border: 4px solid #000; border-radius: 15px; position: absolute; top: 20px; left: 21px; box-sizing: border-box; transition: background 0.2s ease; overflow: hidden; }
 
-/* State 1: Listening (Sound Wave) */
+/* State 1: Listening (Sound Wave Screen) */
 .bmo-screen.listening {
     background-color: #112a20;
 }
 
-/* State 2: Thinking (Grid Face) */
+/* State 2: Thinking (Grid Face Screen) */
 .bmo-screen.thinking {
     background-color: #2c5e50;
 }
@@ -74,7 +85,7 @@ css_styles = """
     display: none;
 }
 
-/* Eyes & Blinking */
+/* Eyes & Blinking Animation */
 .bmo-eye { background: #000; width: 16px; height: 16px; border-radius: 50%; position: absolute; top: 35%; animation: blink 4s infinite; }
 .bmo-eye.left { left: 25%; }
 .bmo-eye.right { right: 25%; }
@@ -99,7 +110,7 @@ css_styles = """
     transition: all 0.15s ease;
 }
 
-/* State 3: Speaking Animation (Mouth opening and closing) */
+/* State 3: Speaking Animation (Keyframe mouth loop) */
 .bmo-mouth.speaking {
     animation: talk-anim 0.25s infinite alternate ease-in-out;
     background: #112a20;
@@ -163,7 +174,6 @@ bmo_html = f"""
         const mouth = document.getElementById('bmo-mouth');
         if (!screen || !mouth) return;
 
-        // Reset all dynamic state classes
         screen.className = 'bmo-screen';
         mouth.classList.remove('speaking');
 
@@ -214,44 +224,54 @@ def bmo_pipeline(audio_data):
             print(f"[!] WAV resample warning: {e}")
             target_16k_wav = audio_data
 
-    # 1. Transcribe with PyTorch Whisper (Ears)
+    # 1. Ears: Transcribe speech with PyTorch Whisper ASR
     result = whisper_model.transcribe(target_16k_wav, language="fr")
     user_text = result.get("text", "").strip()
     if not user_text:
         user_text = "Bonjour !"
-    print(f"  [1/3 Ears] Transcribed: \"{user_text}\"")
+    print(f"  [Ears] Transcribed: \"{user_text}\"")
 
-    # 2. Conversational response (Fast Tutor logic)
-    bmo_text = f"Saluts ! J'ai bien entendu : '{user_text}'. C'est du très bon français !"
-    print(f"  [2/3 Brain] BMO generated: \"{bmo_text}\"")
+    # 2. Brain: Generate response with Qwen LLM
+    if has_llm:
+        response = llm.create_chat_completion(
+            messages=[
+                {"role": "system", "content": "You are BMO (pronounced Beemo), a quirky French language tutor. Keep responses short and conversational, correcting errors gently."},
+                {"role": "user", "content": user_text}
+            ],
+            max_tokens=80
+        )
+        bmo_text = response["choices"][0]["message"]["content"]
+    else:
+        bmo_text = f"Salut ! J'ai entendu : '{user_text}'. C'est du très bon français !"
+    
+    bmo_text = bmo_text.replace("BMO", "Beemo")
+    print(f"  [Brain] BMO generated: \"{bmo_text}\"")
 
-    # 3. Cartoon Voice DSP Synthesis (Voice)
+    # 3. Voice & DSP: Synthesize with Kokoro (1.15x speed) & Pitch Shift (+4.0 semitones)
     sr = 24000
     if has_kokoro:
         try:
-            # 1.15x speed for energetic cartoon cadence
             samples, sr = kokoro.create(bmo_text, voice="ff_siwis", speed=1.15, lang="fr-fr")
             samples = samples.squeeze().astype(np.float32)
-        except Exception as e:
-            print(f"[!] Kokoro synthesis warning: {e}")
+        except Exception:
             t = np.linspace(0, 1.5, int(24000 * 1.5), False)
             samples = np.sin(2 * np.pi * 520 * t).astype(np.float32) * 0.3
     else:
         t = np.linspace(0, 1.5, int(24000 * 1.5), False)
         samples = np.sin(2 * np.pi * 520 * t).astype(np.float32) * 0.3
 
-    # Apply DSP Pitch-Shift (+4.0 semitones for high-pitched child console tone)
-    print("  [DSP Filter] Pitch shifting +4.0 semitones with librosa...")
+    print("  [Voice DSP] Pitch shifting +4.0 semitones with librosa...")
     samples_shifted = librosa.effects.pitch_shift(y=samples, sr=sr, n_steps=4.0)
 
     out_wav = "bmo_live_response.wav"
     samples_int16 = (samples_shifted * 32767).astype(np.int16)
     wav.write(out_wav, sr, samples_int16)
 
+    # Returns audio player file, text conversation log, and 'speaking' UI state
     return out_wav, f"User: {user_text}\nBMO: {bmo_text}", "speaking"
 
 with gr.Blocks() as demo:
-    gr.Markdown("<h1 style='text-align: center;'>🤖 BMO Live Edge Tutor</h1>")
+    gr.Markdown("<h1 style='text-align: center;'>🤖 BMO Live Edge Tutor - Integrated Dashboard</h1>")
     
     with gr.Row():
         with gr.Column(scale=1):
@@ -276,5 +296,5 @@ with gr.Blocks() as demo:
     )
 
 if __name__ == "__main__":
-    print("[*] Launching BMO Cartoon Voice Dashboard on http://127.0.0.1:7875 ...")
-    demo.launch(server_name="127.0.0.1", server_port=7875)
+    print("[*] Launching Integrated BMO Dashboard on http://127.0.0.1:7880 ...")
+    demo.launch(server_name="127.0.0.1", server_port=7880)
