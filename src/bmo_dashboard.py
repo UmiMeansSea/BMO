@@ -1,10 +1,9 @@
 """
-BMO Live Edge Tutor - Integrated Aesthetic Dashboard & Chatbot UI
-===================================================================
-Features:
-1. High-Contrast Dark Text Pastels (Pale-yellow User bubbles, Light-green BMO bubbles).
-2. Off-Screen Audio Component Cloaking (.cloak-audio).
-3. Red Hardware Master Toggle JS Bridge.
+BMO Live Edge Tutor - Push-to-Talk Aesthetic Dashboard
+======================================================
+1. Push-to-Talk Hardware JS Bridge with Audio Cues (High start beep, Low stop beep).
+2. Deep CSS Pastel Overrides for Dark Mode Neutralization.
+3. Native gr.Audio stop_recording auto-submit pipeline.
 4. Pure Python Scipy + Librosa Cartoon DSP Pitch Shift (+4.0 semitones).
 5. Hybrid Memory Architecture (Active Window + Background Summarization).
 """
@@ -30,7 +29,7 @@ except ImportError as e:
 MODELS_DIR = Path(r"D:\BMO-Research\models")
 LLM_PATH = MODELS_DIR / "bmo-model-4bit.gguf"
 
-print("[*] Initializing BMO Aesthetic Chatbot Dashboard System...")
+print("[*] Initializing Push-to-Talk BMO Dashboard System...")
 print("  1/2 Loading Whisper ASR (small)...")
 whisper_model = whisper.load_model("small")
 
@@ -42,7 +41,7 @@ except Exception as e:
     print(f"[!] LLM load notice: {e}")
     has_llm = False
 
-print("[OK] Integrated BMO system initialized successfully!\n")
+print("[OK] Push-to-Talk BMO system initialized successfully!\n")
 
 BMO_SYSTEM_PROMPT = """You are BMO (pronounced Beemo), an encouraging, highly attentive French language tutor. The user is a beginner (A2/B1).
 RULES:
@@ -52,7 +51,7 @@ RULES:
 4. Keep responses conversational and brief."""
 
 css_styles = """
-/* BMO Chassis & Hardware Animations */
+/* BMO Chassis & Animations */
 #bmo-container { background-color: #3ca993; width: 400px; height: 520px; border: 4px solid #000; border-radius: 20px; position: relative; margin: 0 auto; }
 .bmo-screen { background-color: #b7efcc; width: 350px; height: 220px; border: 4px solid #000; border-radius: 15px; position: absolute; top: 20px; left: 21px; box-sizing: border-box; transition: background 0.2s ease; overflow: hidden; }
 
@@ -78,17 +77,15 @@ css_styles = """
 .bmo-triangle-svg { position: absolute; top: 310px; right: 110px; width: 40px; height: 40px; }
 .bmo-gc { position: absolute; background: #33ff33; border: 4px solid #000; width: 25px; height: 25px; border-radius: 50%; top: 325px; right: 50px; }
 .bmo-rc { position: absolute; background: #ff0000; border: 4px solid #000; width: 60px; height: 60px; border-radius: 50%; bottom: 60px; right: 50px; cursor: pointer; transition: transform 0.1s; }
-.bmo-rc:active { transform: scale(0.9); }
+.bmo-rc:active { transform: scale(0.92); }
 .bmo-pill { position: absolute; background: #0000ff; border: 4px solid #000; width: 45px; height: 15px; border-radius: 15px; bottom: 25px; } .bmo-pill.p1 { left: 40px; } .bmo-pill.p2 { left: 105px; }
 
-/* Off-Screen Audio Component Cloaking */
+/* Force Chatbot UI Colors & Cloak Audio Components */
 .cloak-audio { position: absolute !important; top: -9999px !important; left: -9999px !important; opacity: 0; pointer-events: none; height: 0px !important; }
-
-/* Force High-Contrast Dark Text in Chat Bubbles Regardless of Theme */
-.cute-chat { background-color: #f4fce8 !important; border-radius: 20px !important; border: 2px solid #e0f2c4 !important; padding: 15px !important; }
-.cute-chat .message * { color: #1a1a1a !important; font-weight: 500 !important; }
-.cute-chat .message.user { background-color: #fff9d2 !important; border: 2px solid #fbe490 !important; border-radius: 20px 20px 0 20px !important; }
-.cute-chat .message.bot { background-color: #d7f4a5 !important; border: 2px solid #bce27f !important; border-radius: 20px 20px 20px 0 !important; }
+.cute-chat, .cute-chat .wrap, .cute-chat .bubble-wrap { background-color: #f4fce8 !important; border-radius: 20px !important; }
+.cute-chat .message * { color: #1a1a1a !important; font-weight: 500 !important; font-size: 16px !important; margin: 0 !important; }
+.cute-chat .message.user { background-color: #fff9d2 !important; border: 2px solid #fbe490 !important; border-radius: 20px 20px 0 20px !important; padding: 12px !important; }
+.cute-chat .message.bot { background-color: #d7f4a5 !important; border: 2px solid #bce27f !important; border-radius: 20px 20px 20px 0 !important; padding: 12px !important; }
 """
 
 bmo_html = f"""
@@ -105,22 +102,46 @@ bmo_html = f"""
     <svg class="bmo-dpad-svg" viewBox="0 0 100 100"><path d="M 35 5 L 65 5 L 65 35 L 95 35 L 95 65 L 65 65 L 65 95 L 35 95 L 35 65 L 5 65 L 5 35 L 35 35 Z" fill="#ffcc00" stroke="#000" stroke-width="4" stroke-linejoin="round"/></svg>
     <svg class="bmo-triangle-svg" viewBox="0 0 100 100"><polygon points="50,10 90,90 10,90" fill="#00ccff" stroke="#000" stroke-width="6" stroke-linejoin="round"/></svg>
     <div class="bmo-gc"></div>
-    <!-- RED BUTTON Master Toggle -->
+    <!-- Red Hardware Push-to-Talk Toggle -->
     <div class="bmo-rc" onclick="window.toggleBmoRecord()"></div>
     <div class="bmo-pill p1"></div><div class="bmo-pill p2"></div>
 </div>
 <script>
     let isRecording = false;
 
-    window.toggleBmoRecord = function() {{
-        const btn = document.querySelector('.cloak-audio button');
-        if (btn) btn.click();
+    function playBeep(freq, type) {{
+        try {{
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, ctx.currentTime);
+            gain.gain.setValueAtTime(0.1, ctx.currentTime);
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.start(); osc.stop(ctx.currentTime + 0.15);
+        }} catch(e) {{}}
+    }}
 
-        isRecording = !isRecording;
-        if (isRecording) {{
-            window.setBMOState('listening');
+    window.toggleBmoRecord = function() {{
+        const micContainer = document.getElementById('bmo-mic');
+        if (!micContainer) return;
+
+        if (!isRecording) {{
+            const recordBtn = micContainer.querySelector('button[aria-label="Record"]') || micContainer.querySelector('button');
+            if (recordBtn) {{
+                recordBtn.click();
+                isRecording = true;
+                playBeep(880, 'sine'); // High start beep
+                window.setBMOState('listening');
+            }}
         }} else {{
-            window.setBMOState('thinking');
+            const stopBtn = micContainer.querySelector('button[aria-label="Stop"]') || micContainer.querySelector('button');
+            if (stopBtn) {{
+                stopBtn.click();
+                isRecording = false;
+                playBeep(440, 'sine'); // Low stop beep
+                window.setBMOState('thinking');
+            }}
         }}
     }};
 
@@ -159,7 +180,7 @@ def summarize_turns(old_turns: list, current_summary: str) -> str:
         new_summary = new_summary[-250:]
     return new_summary
 
-def bmo_pipeline(audio_data, history_data):
+def bmo_response_generator(audio_data, history_data):
     if history_data is None:
         history_data = {"turns": [], "summary": "", "messages": []}
 
@@ -168,9 +189,9 @@ def bmo_pipeline(audio_data, history_data):
     messages = history_data.get("messages", [])
 
     if audio_data is None:
-        return None, messages, summary, "idle", history_data
+        return None, "idle", messages, history_data
 
-    print("\n[*] Processing incoming audio stream...")
+    print("\n[*] Processing incoming Push-to-Talk audio stream...")
     
     if isinstance(audio_data, tuple):
         sr, arr = audio_data
@@ -202,13 +223,12 @@ def bmo_pipeline(audio_data, history_data):
     turns.append({"role": "user", "content": user_text})
     messages.append({"role": "user", "content": user_text})
 
-    # Rolling Memory Summarization: Keep last 4 turns in active window
     SLIDING_WINDOW_SIZE = 4
     if len(turns) > SLIDING_WINDOW_SIZE:
         old_turns = turns[:-SLIDING_WINDOW_SIZE]
         turns = turns[-SLIDING_WINDOW_SIZE:]
         summary = summarize_turns(old_turns, summary)
-        print(f"  [Memory Engine] New Background Summary: \"{summary}\"")
+        print(f"  [Memory Engine] Background Summary: \"{summary}\"")
 
     system_prompt_with_summary = BMO_SYSTEM_PROMPT
     if summary:
@@ -234,7 +254,7 @@ def bmo_pipeline(audio_data, history_data):
 
     history_data = {"turns": turns, "summary": summary, "messages": messages}
 
-    # 3. Voice & DSP: Synthesize French Speech + Pitch Shift (+4.0 semitones for BMO Cartoon Voice)
+    # 3. Voice & DSP: Synthesize Speech + Pitch Shift (+4.0 semitones for BMO Cartoon Voice)
     print("  [3/3 Voice] Synthesizing French speech...")
     out_wav = "bmo_live_response.wav"
     try:
@@ -259,40 +279,39 @@ def bmo_pipeline(audio_data, history_data):
         tone = np.sin(2 * np.pi * 520 * t) * 0.3
         wav.write(out_wav, sr_out, (tone * 32767).astype(np.int16))
 
-    return out_wav, messages, summary, "speaking", history_data
+    return out_wav, "speaking", messages, history_data
 
 with gr.Blocks(theme=gr.themes.Soft()) as demo:
     gr.Markdown("<h1 style='text-align: center; color: #3ca993;'>🤖 BMO Live Edge Tutor</h1>")
-    
     chat_memory = gr.State({"turns": [], "summary": "", "messages": []})
 
     with gr.Row():
         with gr.Column(scale=1):
             gr.HTML(bmo_html)
         with gr.Column(scale=1):
-            # Clean Chat UI
             chatbot = gr.Chatbot(type="messages", elem_classes="cute-chat", height=520)
             bmo_state = gr.Textbox(visible=False)
-            
-            # Cloaked Audio Components (Off-screen)
-            with gr.Group(elem_classes="cloak-audio"):
-                audio_in = gr.Audio(sources=["microphone"], type="numpy", label="Speak to BMO")
-                audio_out = gr.Audio(label="BMO Voice Response", autoplay=True)
-                txt_summary = gr.Textbox(label="Background Memory Summary")
-                btn = gr.Button("Talk to BMO")
-            
-            btn.click(
-                fn=bmo_pipeline, 
-                inputs=[audio_in, chat_memory], 
-                outputs=[audio_out, chatbot, txt_summary, bmo_state, chat_memory]
-            )
 
-    bmo_state.change(
-        fn=None,
-        inputs=[bmo_state],
-        js="(state) => window.setBMOState(state)"
+            with gr.Group(elem_classes="cloak-audio"):
+                audio_input = gr.Audio(sources=["microphone"], type="numpy", elem_id="bmo-mic")
+                bmo_voice = gr.Audio(autoplay=True)
+
+    # Auto-Submit: Trigger pipeline immediately when Push-to-Talk recording stops
+    audio_input.stop_recording(
+        fn=bmo_response_generator,
+        inputs=[audio_input, chat_memory],
+        outputs=[bmo_voice, bmo_state, chatbot, chat_memory]
     )
 
+    # Auto-Reset: Return to idle face once speech finishes
+    bmo_voice.stop(
+        fn=lambda: "idle",
+        inputs=[],
+        outputs=[bmo_state]
+    )
+
+    bmo_state.change(fn=None, inputs=[bmo_state], js="(state) => window.setBMOState(state)")
+
 if __name__ == "__main__":
-    print("[*] Launching Cloaked Audio BMO Dashboard on http://127.0.0.1:7898 ...")
-    demo.launch(server_name="127.0.0.1", server_port=7898)
+    print("[*] Launching Push-to-Talk BMO Dashboard on http://127.0.0.1:7900 ...")
+    demo.launch(server_name="127.0.0.1", server_port=7900)
