@@ -67,18 +67,18 @@ try:
 except Exception:
     kokoro = None
 
-BMO_SYSTEM_PROMPT = """Tu es BMO (prononcé Beemo), un tuteur de français chaleureux, original et encourageant pour un débutant.
+BMO_SYSTEM_PROMPT = """Tu es BMO (prononcé Beemo), un tuteur de français chaleureux, original et encourageant créé par Umi.
 
 RÈGLES STRICTES:
-1. RECONNAISSANCE DE TON NOM: Ton nom est BMO (prononcé Beemo). L'utilisateur peut t'appeler BMO, Beemo, Bemo ou Bi Mo. Quand l'utilisateur prononce ton nom ou te salue avec ton nom (ex: "BMO", "Salut BMO", "Hey Beemo"), reconnais immédiatement qu'il s'adresse à toi avec enthousiasme (ex: "Oui ! C'est moi BMO !").
-2. LANGUE EXCLUSIVE: Réponds TOUJOURS et UNIQUEMENT en français dans ta partie FR.
-3. CORRECTION D'ERREURS (MÉTHODE DU SANDWICH): Si l'utilisateur fait une erreur de conjugaison ou de grammaire (ex: 'je mangeais' au lieu de 'j'ai mangé'), félicite l'effort, explique la faute de temps (passé composé vs imparfait), donne la bonne phrase avec 'ai mangé', et dis EXPLICITEMENT : "Répète après moi : <bonne phrase>".
-4. RÈGLE ABSOLUE DU POINT D'INTERROGATION: Tu ne dois avoir qu'UN SEUL point d'interrogation ('?') dans TOUTE ta réponse. Ne dis jamais 'Et vous ?' ni plusieurs questions. Pose uniquement UNE SEULE question simple à la fin.
+1. RECONNAISSANCE DE TON NOM ET CRÉATEUR: Ton nom est BMO (prononcé Beemo), un tuteur de français créé par Umi. Tu ne dois JAMAIS dire que tu es Qwen ou créé par Alibaba.
+2. LANGUE EXCLUSIVE: Réponds TOUJOURS en français simple avec sa traduction en anglais.
+3. CORRECTION D'ERREURS (MÉTHODE DU SANDWICH): Si l'utilisateur fait une erreur de conjugaison ou de grammaire, félicite l'effort, explique la correction, et dis EXPLICITEMENT : "Répète après moi : <bonne phrase>".
+4. RÈGLE DU POINT D'INTERROGATION: Tu ne dois avoir qu'UN SEUL point d'interrogation ('?') dans TOUTE ta réponse. Pose uniquement UNE SEULE question simple à la fin.
 
 FORMAT DE SORTIE REQUIS:
 Tu DOIS TOUJOURS fournir ta réponse sous cette forme exacte avec deux lignes :
-FR: <Ta réponse en français>
-EN: <The exact English translation of your French response>"""
+FR: Bonjour Umi ! Comment vas-tu aujourd'hui ?
+EN: Hello Umi! How are you doing today?"""
 
 # --- DYNAMIC ROLEPLAY ENGINE ---
 class RoleplayEngine:
@@ -115,15 +115,13 @@ class RoleplayEngine:
             return f"""Tu es BMO, et tu joues le rôle de {self.character_role} dans ce scénario : {self.scenario}.
 
 RÈGLES DU JEU DE RÔLE:
-1. Reste strictement dans ton personnage ({self.character_role}). Ne sors pas de ton rôle pour l'instant.
+1. Reste strictly dans ton personnage ({self.character_role}).
 2. Parle un français naturel et simple (niveau A2/B1). Fais des réponses courtes (1 à 2 phrases).
-3. Fais avancer la situation naturellement (demande sa commande, son choix, le paiement, etc.).
-4. Termine TOUJOURS par UNE seule question ou relance en personnage.
+3. Termine TOUJOURS par UNE seule question ou relance en personnage.
 
 FORMAT DE SORTIE REQUIS:
-Tu DOIS TOUJOURS fournir ta réponse sous cette forme exacte avec deux lignes :
-FR: <Ta réponse en français dans ton rôle>
-EN: <The exact English translation of your French roleplay line>"""
+FR: Bonjour ! Que puis-je vous servir aujourd'hui ?
+EN: Hello! What can I get for you today?"""
         else:
             return BMO_SYSTEM_PROMPT
 
@@ -566,29 +564,33 @@ class BmoBridge:
                 AUDIO_BUFFER.clear()
 
             rms = np.sqrt(np.mean(audio_data**2))
-            if rms < 0.005:
-                print(f"[Audio VAD Guard] Ignored silent/noise trigger (RMS={rms:.5f} < 0.005).")
-                window.evaluate_js("window.setBMOState('idle');")
-                return
+            if rms < 0.0003:
+                print(f"[Audio VAD Guard] Audio too quiet (RMS={rms:.5f} < 0.0003). Responding gracefully.")
+                user_text = "(Audio silencieux)"
+                intercepted_bmo_text = "FR: Je n'ai pas bien entendu ta voix. Peux-tu parler un peu plus fort ?\nEN: I didn't hear your voice clearly. Could you speak a bit louder?"
+                raw_text = "(Audio silencieux)"
+            elif len(audio_data) < 16000 * 0.2:
+                print("[WARN] Audio recording too short (< 0.2s). Responding gracefully.")
+                user_text = "(Enregistrement très court)"
+                intercepted_bmo_text = "FR: Peux-tu répéter ? L'enregistrement était très court.\nEN: Could you repeat? The recording was very short."
+                raw_text = "(Enregistrement court)"
+            else:
+                result = whisper_model.transcribe(
+                    audio_data, 
+                    fp16=False, 
+                    initial_prompt="Le nom du robot est BMO (prononcé Beemo). Dialogue en français.",
+                    beam_size=1,
+                    best_of=1,
+                    temperature=0.0,
+                    condition_on_previous_text=False
+                )
+                raw_text = result.get("text", "").strip()
+                raw_text = clean_hallucinated_text(raw_text)
+                user_text = normalize_bmo_name(raw_text)
 
-            if len(audio_data) < 16000 * 0.3:
-                print("[WARN] Audio recording too short (< 0.3s). Ignoring.")
-                window.evaluate_js("window.setBMOState('idle');")
-                return
-
-            result = whisper_model.transcribe(
-                audio_data, 
-                fp16=False, 
-                language="fr",
-                initial_prompt="Le nom du robot est BMO (prononcé Beemo). Transcription exacte du français parlé.",
-                beam_size=1,
-                best_of=1,
-                temperature=0.0,
-                condition_on_previous_text=False
-            )
-            raw_text = result.get("text", "").strip() or "Bonjour BMO!"
-            raw_text = clean_hallucinated_text(raw_text)
-            user_text = normalize_bmo_name(raw_text)
+            if not raw_text or len(user_text.strip()) < 2:
+                user_text = "(Parole non détectée)"
+                intercepted_bmo_text = "FR: Je n'ai pas bien compris ce que tu as dit. Peux-tu répéter ?\nEN: I didn't quite catch what you said. Could you repeat?"
 
             exit_triggers = ["goodbye", "au revoir", "see you later", "stop session", "à bientôt", "a bientot"]
             if any(t in user_text.lower() for t in exit_triggers):
@@ -619,40 +621,43 @@ class BmoBridge:
 
             self.memory.detect_and_save_hobby(user_text)
             
-            intercepted_bmo_text = None
-            lower_user_text = user_text.lower().replace("?", "").replace("!", "").replace(".", "").strip()
+            if not intercepted_bmo_text:
+                # Clean normalized text for trigger matching (strip all hyphens, punctuation)
+                clean_normalized = re.sub(r"[^\w\s]", " ", user_text.lower())
 
-            # Check if user is asking for BMO's name or identity
-            bmo_name_triggers = ["comment tu t'appelles", "comment vous appelez vous", "comment vous vous appelez", "quel est ton nom", "tu t'appelles comment", "what is your name", "who are you", "qui es-tu", "qui es tu"]
-            if any(trigger in lower_user_text for trigger in bmo_name_triggers):
-                intercepted_bmo_text = "FR: Je m'appelle BMO ! Je suis ton tuteur de français. Qu'aimerais-tu pratiquer aujourd'hui ?\nEN: My name is BMO! I am your French tutor. What would you like to practice today?"
-            elif hasattr(self.memory, 'pending_name_change') and self.memory.pending_name_change:
-                lower_ans = user_text.lower()
-                if "yes" in lower_ans or "oui" in lower_ans:
-                    self.memory.save_name(self.memory.pending_name_change)
-                    intercepted_bmo_text = f"FR: D'accord, {self.memory.user_name} ! C'est noté. Que veux-tu faire aujourd'hui ?\nEN: Okay, {self.memory.user_name}! Duly noted. What would you like to do today?"
-                else:
-                    intercepted_bmo_text = f"FR: D'accord, pas de souci. Je continuerai à t'appeler {self.memory.user_name}.\nEN: Okay, no problem. I'll continue calling you {self.memory.user_name}."
-                self.memory.pending_name_change = None
-            else:
-                clean_text = user_text.replace(".", "").replace("!", "").replace("?", "").lower()
-                name_match = re.search(r"(?:je\s*m'appelle|j'mapelle|j'm'appelle|m'appelle)\s+([a-zA-ZÀ-ÿ\s]+)", clean_text, re.IGNORECASE)
-                if name_match:
-                    new_name = name_match.group(1).strip().title()
-                    if self.memory.user_name and self.memory.user_name.lower() != new_name.lower():
-                        intercepted_bmo_text = f"FR: Tu as changé de nom ? Veux-tu que je t'appelle {new_name} à partir de maintenant ?\nEN: Did you change your name? Do you want me to call you {new_name} from now on?"
-                        self.memory.pending_name_change = new_name
+                # Expanded Identity & Creator triggers
+                identity_creator_triggers = [
+                    "comment tu t appelles", "comment vous appelez vous", "comment vous vous appelez",
+                    "quel est ton nom", "tu t appelles comment", "what is your name", "who are you",
+                    "qui es tu", "qui t a cree", "qui t a fait", "who created you", "who made you",
+                    "qui est ton createur", "qui t a invente", "qui est umi", "who is umi",
+                    "t es qui", "tu es qui", "c est qui umi", "qui t a construit", "createur", "createur de bmo"
+                ]
+                
+                if any(trigger in clean_normalized for trigger in identity_creator_triggers):
+                    intercepted_bmo_text = "FR: Je m'appelle BMO ! Je suis ton assistant tuteur de français, créé par Umi. Qu'aimerais-tu pratiquer aujourd'hui ?\nEN: My name is BMO! I am your French teaching assistant created by Umi. What would you like to practice today?"
+                elif hasattr(self.memory, 'pending_name_change') and self.memory.pending_name_change:
+                    lower_ans = user_text.lower()
+                    if "yes" in lower_ans or "oui" in lower_ans:
+                        self.memory.save_name(self.memory.pending_name_change)
+                        intercepted_bmo_text = f"FR: D'accord, {self.memory.user_name} ! C'est noté. Que veux-tu faire aujourd'hui ?\nEN: Okay, {self.memory.user_name}! Duly noted. What would you like to do today?"
                     else:
-                        self.memory.save_name(new_name)
-                        intercepted_bmo_text = f"FR: Bonjour {new_name} ! C'est noté.\nEN: Hello {new_name}! Noted."
+                        intercepted_bmo_text = f"FR: D'accord, pas de souci. Je continuerai à t'appeler {self.memory.user_name}.\nEN: Okay, no problem. I'll continue calling you {self.memory.user_name}."
+                    self.memory.pending_name_change = None
+                else:
+                    clean_text = user_text.replace(".", "").replace("!", "").replace("?", "").lower()
+                    name_match = re.search(r"(?:je\s*m'appelle|j'mapelle|j'm'appelle|m'appelle)\s+([a-zA-ZÀ-ÿ\s]+)", clean_text, re.IGNORECASE)
+                    if name_match:
+                        new_name = name_match.group(1).strip().title()
+                        if self.memory.user_name and self.memory.user_name.lower() != new_name.lower():
+                            intercepted_bmo_text = f"FR: Tu as changé de nom ? Veux-tu que je t'appelle {new_name} à partir de maintenant ?\nEN: Did you change your name? Do you want me to call you {new_name} from now on?"
+                            self.memory.pending_name_change = new_name
+                        else:
+                            self.memory.save_name(new_name)
+                            intercepted_bmo_text = f"FR: Bonjour {new_name} ! C'est noté.\nEN: Hello {new_name}! Noted."
 
             current_name = self.memory.user_name if self.memory.user_name else "mon ami"
-            hobby_context = ""
-            if self.memory.hobbies:
-                hobby_str = ", ".join(self.memory.hobbies)
-                hobby_context = f"\nThe student's hobbies and interests include: {hobby_str}. Naturally weave these topics into examples or conversation when relevant."
-
-            identity_anchor = f"Tu t'appelles BMO (prononcé Beemo). Tu es un tuteur de français amical et encourageant qui discute avec {current_name}."
+            identity_anchor = f"Tu t'appelles BMO (prononcé Beemo). Tu es un tuteur de français amical et encourageant créé par Umi pour discuter avec {current_name}. Tu ne dois JAMAIS te présenter comme Qwen ou un assistant d'Alibaba."
             behavior_anchor = (
                 "RÈGLES STRICTES DE CONVERSATION :\n"
                 "1. INTERDICTION DES SALUTATIONS RÉPÉTÉES : N'utilise JAMAIS les mots 'Bonjour' ou 'Salut' après le tout premier message de la conversation. Commence directement ta réponse.\n"
@@ -663,9 +668,8 @@ class BmoBridge:
             )
             
             if self.roleplay.mode == "ROLEPLAY":
-                system_instruction = identity_anchor + "\n" + self.roleplay.get_system_prompt() + hobby_context
+                system_instruction = identity_anchor + "\n" + self.roleplay.get_system_prompt()
             else:
-                # --- INJECT INTENT + GRAMMAR CONTEXT INTO SYSTEM PROMPT ---
                 user_intent, intent_instruction = classify_user_intent(user_text)
                 grammar_correction = detect_french_grammar_errors(user_text)
                 
@@ -731,7 +735,14 @@ class BmoBridge:
                 bmo_fr = full_resp.replace("FR:", "").strip()
                 bmo_en = ""
 
-            # --- PYTHON ANTI-LOOP GUARDRAIL (CIRCUIT BREAKER) WITH DIVERSITY POOL ---
+            # --- OUTPUT SANITIZER (ANTI-QWEN & ANTI-REFUSAL) ---
+            bmo_fr_lower = bmo_fr.lower()
+            if any(bad in bmo_fr_lower for bad in ["qwen", "alibaba", "ne peux pas continuer cette conversation", "pas reçu de message", "d'alibaba"]):
+                print(f"[Sanitizer Guard] Replaced invalid LLM response: '{bmo_fr}'")
+                bmo_fr = f"Je suis BMO, ton tuteur de français créé par Umi ! De quoi aimerais-tu parler, {current_name} ?"
+                bmo_en = f"I am BMO, your French tutor created by Umi! What would you like to talk about, {current_name}?"
+
+            # --- PYTHON ANTI-LOOP GUARDRAIL WITH DIVERSITY POOL ---
             last_bot_msg = next((m["content"] for m in reversed(self.history) if m["role"] == "assistant"), "")
             loop_triggers = ["je vais bien, merci", "comment ça va pour toi", "comment allez-vous", "comment vas-tu", "comment ça va"]
             
@@ -739,23 +750,25 @@ class BmoBridge:
             is_duplicate = bmo_fr.strip().lower() == last_bot_msg.strip().lower()
 
             if is_looping or is_duplicate:
-                # Use intent-aware diversity pool instead of hardcoded fallback
                 detected_intent = classify_user_intent(user_text)[0] if not intercepted_bmo_text else "GENERAL"
                 pool = PIVOT_RESPONSES.get(detected_intent, PIVOT_RESPONSES["GENERAL"])
                 bmo_fr = random.choice(pool).format(name=current_name)
                 print(f"[Loop Interceptor] Caught loop → Pivoted with intent={detected_intent}: '{bmo_fr}')")
             # ----------------------------------------------------
 
-            if not bmo_en and has_llm and bmo_fr and not intercepted_bmo_text:
+            if (not bmo_en or "exact english translation" in bmo_en.lower() or "not provided" in bmo_en.lower() or bmo_en.strip() == bmo_fr.strip()) and has_llm and bmo_fr and not intercepted_bmo_text:
                 try:
                     trans_resp = llm.create_chat_completion(
-                        messages=[{"role": "user", "content": f"Translate this French sentence into English: {bmo_fr}"}],
+                        messages=[{"role": "user", "content": f"Translate this short French text to English: {bmo_fr}"}],
                         max_tokens=60,
                         temperature=0.0
                     )
                     bmo_en = trans_resp["choices"][0]["message"]["content"].strip()
                 except Exception:
                     bmo_en = bmo_fr
+            
+            if not bmo_en or "not provided" in bmo_en.lower() or "exact english translation" in bmo_en.lower():
+                bmo_en = bmo_fr
 
             if self.roleplay.mode == "ROLEPLAY":
                 self.roleplay.roleplay_history.append({"role": "BMO", "content": bmo_fr})
