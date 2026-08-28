@@ -1,0 +1,29 @@
+{
+    "system_metadata": {
+        "os_platform": "Windows-11-10.0.26200-SP0",
+        "processor": "AMD64 Family 25 Model 68 Stepping 1, AuthenticAMD",
+        "python_version": "3.14.0 (tags/v3.14.0:ebf955d, Oct  7 2025, 10:15:03) [MSC v.1944 64 bit (AMD64)]",
+        "logical_cpu_cores": 16,
+        "physical_cpu_cores": 8,
+        "total_system_ram_gb": 23.69,
+        "bmo_runtime_ram_footprint_gb": 6.2
+    },
+    "llama_cpp_configuration": {
+        "build_flags": "100% CPU Native (OpenMP / AVX2)",
+        "context_window_n_ctx": 2048,
+        "thread_pinning_n_threads": 8,
+        "quantization_format": "Q4_K_M (4-bit Medium Quantization)",
+        "active_cognitive_model": "Qwen2.5-7B-Instruct-GGUF (7.6B Parameters)",
+        "micro_cot_token_budget": 15
+    },
+    "tts_engine_configuration": {
+        "model": "Kokoro-v1.0 ONNX (82M Parameters)",
+        "voice_preset": "ff_siwis",
+        "audio_queue_architecture": "queue.Queue (Asynchronous Daemon Worker Thread)",
+        "streaming_punctuation_delimiters": [
+            ".",
+            "!",
+            "?"
+        ]
+    }
+}

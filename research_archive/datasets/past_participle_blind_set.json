@@ -1,0 +1,60 @@
+[
+  {"id": "BLIND_01", "category": "Preceding COD (que - Fem Sing)", "input_sentence": "La pomme que j'ai mangé était très sucrée.", "expected_correction": "mangée", "is_erroneous": true},
+  {"id": "BLIND_02", "category": "Preceding COD (que - Masc Plural)", "input_sentence": "Les livres que tu as acheté sont fascinants.", "expected_correction": "achetés", "is_erroneous": true},
+  {"id": "BLIND_03", "category": "Preceding COD (que - Fem Plural)", "input_sentence": "Les fleurs que nous avons cueilli sont belles.", "expected_correction": "cueillies", "is_erroneous": true},
+  {"id": "BLIND_04", "category": "Direct Pronoun (la)", "input_sentence": "Cette tarte ? Je l'ai cuit ce matin.", "expected_correction": "cuite", "is_erroneous": true},
+  {"id": "BLIND_05", "category": "Direct Pronoun (les - Fem)", "input_sentence": "Mes affaires ? Je les ai oublié chez toi.", "expected_correction": "oubliées", "is_erroneous": true},
+  {"id": "BLIND_06", "category": "Auxiliary être (Fem Sing)", "input_sentence": "Elle est parti à la gare à huit heures.", "expected_correction": "partie", "is_erroneous": true},
+  {"id": "BLIND_07", "category": "Auxiliary être (Fem Plural)", "input_sentence": "Elles sont tombé pendant la course.", "expected_correction": "tombées", "is_erroneous": true},
+  {"id": "BLIND_08", "category": "Auxiliary être (Masc Plural)", "input_sentence": "Ils sont venu nous voir hier.", "expected_correction": "venus", "is_erroneous": true},
+  {"id": "BLIND_09", "category": "Interrogative (Quels)", "input_sentence": "Quels films as-tu regardé ce week-end ?", "expected_correction": "regardés", "is_erroneous": true},
+  {"id": "BLIND_10", "category": "Interrogative (Quelles)", "input_sentence": "Quelles chansons avez-vous écouté hier ?", "expected_correction": "écoutées", "is_erroneous": true},
+
+  {"id": "BLIND_11", "category": "Postposed COD (Invariable)", "input_sentence": "J'ai mangée une excellente soupe ce midi.", "expected_correction": "mangé", "is_erroneous": true},
+  {"id": "BLIND_12", "category": "Postposed COD (Invariable)", "input_sentence": "Elle a écrite trois lettres très longues.", "expected_correction": "écrit", "is_erroneous": true},
+  {"id": "BLIND_13", "category": "Postposed COD (Invariable)", "input_sentence": "Nous avons vues des étoiles magnifiques.", "expected_correction": "vu", "is_erroneous": true},
+  {"id": "BLIND_14", "category": "Pronoun 'en' (Invariable)", "input_sentence": "Des erreurs ? Il en a commises beaucoup.", "expected_correction": "commis", "is_erroneous": true},
+  {"id": "BLIND_15", "category": "Pronoun 'en' (Invariable)", "input_sentence": "Des photos ? Nous en avons prises des dizaines.", "expected_correction": "pris", "is_erroneous": true},
+
+  {"id": "BLIND_16", "category": "Reflexive Direct Object", "input_sentence": "Elle s'est coiffé devant le miroir.", "expected_correction": "coiffée", "is_erroneous": true},
+  {"id": "BLIND_17", "category": "Reflexive Direct Object", "input_sentence": "Elles se sont habillé chaleureusement.", "expected_correction": "habillées", "is_erroneous": true},
+  {"id": "BLIND_18", "category": "Reflexive Indirect Object (Invariable)", "input_sentence": "Elles se sont téléphonées hier soir.", "expected_correction": "téléphoné", "is_erroneous": true},
+  {"id": "BLIND_19", "category": "Reflexive Indirect Object (Invariable)", "input_sentence": "Ils se sont parlé pendant deux heures.", "expected_correction": "parlé", "is_erroneous": false},
+  {"id": "BLIND_20", "category": "Reflexive + Postposed COD (Invariable)", "input_sentence": "Elle s'est lavée les mains avant le repas.", "expected_correction": "lavé", "is_erroneous": true},
+
+  {"id": "BLIND_21", "category": "Preceding COD (que - Fem Sing)", "input_sentence": "La maison qu'il a construit est magnifique.", "expected_correction": "construite", "is_erroneous": true},
+  {"id": "BLIND_22", "category": "Preceding COD (que - Fem Plural)", "input_sentence": "Les remarques que tu as fait étaient très justes.", "expected_correction": "faites", "is_erroneous": true},
+  {"id": "BLIND_23", "category": "Direct Pronoun (le)", "input_sentence": "Ce manteau ? Je l'ai mise dans l'armoire.", "expected_correction": "mis", "is_erroneous": true},
+  {"id": "BLIND_24", "category": "Direct Pronoun (la)", "input_sentence": "La question ? Il l'a posé avec hésitation.", "expected_correction": "posée", "is_erroneous": true},
+  {"id": "BLIND_25", "category": "Auxiliary être (Fem Sing)", "input_sentence": "Ma sœur est arrivé en retard au rendez-vous.", "expected_correction": "arrivée", "is_erroneous": true},
+
+  {"id": "BLIND_26", "category": "Control Baseline (Correct Preceding COD)", "input_sentence": "La lettre qu'il a rédigée est claire.", "expected_correction": null, "is_erroneous": false},
+  {"id": "BLIND_27", "category": "Control Baseline (Correct Preceding COD)", "input_sentence": "Les photos que j'ai prises sont floues.", "expected_correction": null, "is_erroneous": false},
+  {"id": "BLIND_28", "category": "Control Baseline (Correct Postposed COD)", "input_sentence": "J'ai écrit plusieurs lettres d'amour.", "expected_correction": null, "is_erroneous": false},
+  {"id": "BLIND_29", "category": "Control Baseline (Correct Auxiliary être)", "input_sentence": "Elles sont arrivées à l'heure exacte.", "expected_correction": null, "is_erroneous": false},
+  {"id": "BLIND_30", "category": "Control Baseline (Correct Pronoun en)", "input_sentence": "Des pommes ? J'en ai mangé trois.", "expected_correction": null, "is_erroneous": false},
+
+  {"id": "BLIND_31", "category": "Infinitive construction (Faire - Invariable)", "input_sentence": "La maison qu'il a faite construire est belle.", "expected_correction": "fait", "is_erroneous": true},
+  {"id": "BLIND_32", "category": "Interrogative (Quel)", "input_sentence": "Quel problème as-tu résolu ?", "expected_correction": null, "is_erroneous": false},
+  {"id": "BLIND_33", "category": "Interrogative (Quelle)", "input_sentence": "Quelle histoire as-tu raconté aux enfants ?", "expected_correction": "racontée", "is_erroneous": true},
+  {"id": "BLIND_34", "category": "Preceding COD (que - Masc Plural)", "input_sentence": "Les gâteaux que nous avons préparé sont prêts.", "expected_correction": "préparés", "is_erroneous": true},
+  {"id": "BLIND_35", "category": "Direct Pronoun (les - Masc)", "input_sentence": "Ces documents ? Je les ai envoyé par courriel.", "expected_correction": "envoyés", "is_erroneous": true},
+
+  {"id": "BLIND_36", "category": "Auxiliary être (Fem Plural)", "input_sentence": "Mes amies sont resté chez moi tout le week-end.", "expected_correction": "restées", "is_erroneous": true},
+  {"id": "BLIND_37", "category": "Auxiliary être (Masc Plural)", "input_sentence": "Les étudiants sont sorti de la classe.", "expected_correction": "sortis", "is_erroneous": true},
+  {"id": "BLIND_38", "category": "Postposed COD (Invariable)", "input_sentence": "Nous avons choisie la meilleure solution.", "expected_correction": "choisi", "is_erroneous": true},
+  {"id": "BLIND_39", "category": "Postposed COD (Invariable)", "input_sentence": "Ils ont achetés une grande maison de campagne.", "expected_correction": "acheté", "is_erroneous": true},
+  {"id": "BLIND_40", "category": "Reflexive Direct Object", "input_sentence": "Elle s'est préparé pour la fête.", "expected_correction": "préparée", "is_erroneous": true},
+
+  {"id": "BLIND_41", "category": "Control Baseline (Correct Refl + Postposed COD)", "input_sentence": "Elle s'est lavé les cheveux ce matin.", "expected_correction": null, "is_erroneous": false},
+  {"id": "BLIND_42", "category": "Control Baseline (Correct Refl Direct Object)", "input_sentence": "Elle s'est lavée avant d'aller dormir.", "expected_correction": null, "is_erroneous": false},
+  {"id": "BLIND_43", "category": "Control Baseline (Correct Auxiliary être)", "input_sentence": "Ils sont tombés dans le piège.", "expected_correction": null, "is_erroneous": false},
+  {"id": "BLIND_44", "category": "Control Baseline (Correct Preceding COD)", "input_sentence": "Les blagues qu'il a racontées étaient drôles.", "expected_correction": null, "is_erroneous": false},
+  {"id": "BLIND_45", "category": "Preceding COD (que - Fem Sing)", "input_sentence": "La décision qu'elle a pris était difficile.", "expected_correction": "prise", "is_erroneous": true},
+
+  {"id": "BLIND_46", "category": "Direct Pronoun (la)", "input_sentence": "La clé ? Je l'ai retrouvé dans mon sac.", "expected_correction": "retrouvée", "is_erroneous": true},
+  {"id": "BLIND_47", "category": "Direct Pronoun (les - Fem)", "input_sentence": "Ces réunions ? Je les ai annulé hier.", "expected_correction": "annulées", "is_erroneous": true},
+  {"id": "BLIND_48", "category": "Auxiliary être (Fem Sing)", "input_sentence": "Elle est monté au sommet de la montagne.", "expected_correction": "montée", "is_erroneous": true},
+  {"id": "BLIND_49", "category": "Control Baseline (Correct Invariable en)", "input_sentence": "Des conseils ? Elle m'en a donné beaucoup.", "expected_correction": null, "is_erroneous": false},
+  {"id": "BLIND_50", "category": "Preceding COD (que - Masc Plural)", "input_sentence": "Les exercices que nous avons fait étaient simples.", "expected_correction": "faits", "is_erroneous": true}
+]
