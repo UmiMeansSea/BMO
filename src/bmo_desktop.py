@@ -3,7 +3,6 @@ import os
 import time
 import re
 import json
-import random
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -32,10 +31,15 @@ LOCAL_MODELS_DIR = BASE_DIR / "models"
 
 if LOCAL_MODELS_DIR.exists() and (LOCAL_MODELS_DIR / "bmo-model-4bit.gguf").exists():
     MODELS_DIR = LOCAL_MODELS_DIR
+    LLM_NAME = "bmo-model-4bit.gguf"
+elif Path(r"D:\BMO-Research\models\bmo-model-3b-4bit.gguf").exists():
+    MODELS_DIR = Path(r"D:\BMO-Research\models")
+    LLM_NAME = "bmo-model-3b-4bit.gguf"
 else:
     MODELS_DIR = Path(r"D:\BMO-Research\models")
+    LLM_NAME = "bmo-model-4bit.gguf"
 
-LLM_PATH = MODELS_DIR / "bmo-model-4bit.gguf"
+LLM_PATH = MODELS_DIR / LLM_NAME
 KOKORO_MODEL = MODELS_DIR / "kokoro-v1.0.onnx"
 KOKORO_VOICES = MODELS_DIR / "voices-v1.0.bin"
 
@@ -43,9 +47,10 @@ print(f"[*] Initializing BMO Native Desktop Engine using models from: {MODELS_DI
 whisper_model = whisper.load_model("small")
 
 try:
-    llm = Llama(model_path=str(LLM_PATH), n_ctx=768, n_threads=4, verbose=False)
+    llm = Llama(model_path=str(LLM_PATH), n_ctx=1024, n_threads=4, verbose=False)
     has_llm = True
-except Exception:
+except Exception as e:
+    print(f"[!] LLM Load Notice: {e}")
     has_llm = False
 
 def _patched_create_audio(self, phonemes, voice, speed):
@@ -67,23 +72,8 @@ try:
 except Exception:
     kokoro = None
 
-BMO_SYSTEM_PROMPT = """Tu es BMO (prononcé Beemo), un tuteur de français chaleureux, original et encourageant créé par Umi.
-
-RÈGLES STRICTES:
-1. RECONNAISSANCE DE TON NOM ET CRÉATEUR: Ton nom est BMO (prononcé Beemo), un tuteur de français créé par Umi. Tu ne dois JAMAIS dire que tu es Qwen ou créé par Alibaba.
-2. LANGUE EXCLUSIVE: Réponds TOUJOURS en français simple avec sa traduction en anglais.
-3. CORRECTION D'ERREURS (MÉTHODE DU SANDWICH): Si l'utilisateur fait une erreur de conjugaison ou de grammaire, félicite l'effort, explique la correction, et dis EXPLICITEMENT : "Répète après moi : <bonne phrase>".
-4. RÈGLE DU POINT D'INTERROGATION: Tu ne dois avoir qu'UN SEUL point d'interrogation ('?') dans TOUTE ta réponse. Pose uniquement UNE SEULE question simple à la fin.
-
-FORMAT DE SORTIE REQUIS:
-Tu DOIS TOUJOURS fournir ta réponse sous cette forme exacte avec deux lignes :
-FR: Bonjour Umi ! Comment vas-tu aujourd'hui ?
-EN: Hello Umi! How are you doing today?"""
-
 # --- DYNAMIC ROLEPLAY ENGINE ---
 class RoleplayEngine:
-    """Manages conversational modes, in-character personas, and multi-turn debriefs."""
-    
     def __init__(self):
         self.mode = "TUTOR"
         self.scenario = None
@@ -110,20 +100,20 @@ class RoleplayEngine:
                 return "a French Store", "the store shopkeeper"
         return None, None
 
-    def get_system_prompt(self):
+    def get_system_prompt(self, user_name):
         if self.mode == "ROLEPLAY":
-            return f"""Tu es BMO, et tu joues le rôle de {self.character_role} dans ce scénario : {self.scenario}.
+            return f"""Tu es BMO, et tu joues le rôle de {self.character_role} dans ce scénario : {self.scenario}. Tu parles à {user_name}.
 
-RÈGLES DU JEU DE RÔLE:
-1. Reste strictly dans ton personnage ({self.character_role}).
+RÈGLES DU JEU DE RÔLE :
+1. Reste strictement dans ton personnage ({self.character_role}).
 2. Parle un français naturel et simple (niveau A2/B1). Fais des réponses courtes (1 à 2 phrases).
-3. Termine TOUJOURS par UNE seule question ou relance en personnage.
+3. Termine TOUJOURS par une relance ou question en personnage.
 
-FORMAT DE SORTIE REQUIS:
-FR: Bonjour ! Que puis-je vous servir aujourd'hui ?
-EN: Hello! What can I get for you today?"""
-        else:
-            return BMO_SYSTEM_PROMPT
+FORMAT REQUIS :
+ANALYSE: ACT={self.character_role} | SITUATION={self.scenario}
+FR: <Ta réponse en français dans ton rôle>
+EN: <The exact English translation>"""
+        return ""
 
     def build_debrief_prompt(self):
         transcript = "\n".join([f"{msg['role']}: {msg['content']}" for msg in self.roleplay_history])
@@ -131,15 +121,15 @@ EN: Hello! What can I get for you today?"""
 Voici la conversation :
 {transcript}
 
-TÂCHE: Donne un bilan court et encourageant en français :
-1. Un compliment chaleureux sur sa participation au jeu de rôle.
-2. Un conseil sur une faute de grammaire ou de prononciation observée.
-3. Le rappel de 2 phrases essentielles en français utilisées dans ce scénario.
-Fais un bilan court (3 à 4 phrases maximum).
+TÂCHE : Donne un bilan court et encourageant (3 phrases max) :
+1. Félicitations pour la participation.
+2. Un point de grammaire/vocabulaire observé.
+3. Deux expressions utiles à retenir.
 
-FORMAT DE SORTIE REQUIS:
+FORMAT REQUIS :
+ANALYSE: DEBRIEF=terminé
 FR: <Ton bilan en français>
-EN: <The exact English translation of your French debrief>"""
+EN: <The exact English translation>"""
 
 # --- ADAPTIVE SCAFFOLDING ENGINE ---
 class ScaffoldingEngine:
@@ -163,30 +153,20 @@ class ScaffoldingEngine:
 
         return "NONE", None
 
-    def generate_hint_prompt(self, request_type, target, conversation_history):
+    def generate_hint_prompt(self, request_type, target):
         if request_type == "TRANSLATION":
-            return f"""L'utilisateur demande comment dire '{target}' en français.
-RÈGLES:
-1. Donne la traduction française de '{target}'.
-2. Donne une amorce de phrase courte.
-3. Demande à l'utilisateur de compléter sa phrase.
-
-FORMAT DE SORTIE REQUIS:
-FR: <Ta réponse et amorce en français>
-EN: <The exact English translation of your French response>"""
-
+            return f"""L'étudiant demande comment dire '{target}' en français.
+FORMAT REQUIS :
+ANALYSE: TYPE=traduction | MOT={target}
+FR: <Donne la traduction et une amorce de phrase courte en français>
+EN: <The exact English translation>"""
         elif request_type in ["HINT", "HESITATION"]:
-            return """L'utilisateur hésite ou demande un indice.
-RÈGLES:
-1. Donne un indice encourageant ou une amorce de phrase en français (ex: 'Essaie de commencer par : Je voudrais...').
-2. Ne donne pas toute la phrase immédiatement.
-3. Demande-lui gentiment de compléter son idée.
-
-FORMAT DE SORTIE REQUIS:
-FR: <Ton indice et amorce en français>
-EN: <The exact English translation of your French response>"""
-
-        return None
+            return """L'étudiant hésite ou demande un indice.
+FORMAT REQUIS :
+ANALYSE: TYPE=indice
+FR: <Donne un indice encourageant ou une amorce (ex: 'Tu peux commencer par : Je voudrais...')>
+EN: <The exact English translation>"""
+        return ""
 
 # --- SESSION MEMORY ENGINE ---
 class SessionMemoryEngine:
@@ -224,7 +204,6 @@ class SessionMemoryEngine:
     def detect_and_save_hobby(self, user_text):
         pattern = r"(?:j'aime|j'adore|je joue|ma passion est|mon passe-temps est)\s+(?:à|de|de la|du|le|la|les|un|une)?\s*([a-zA-ZÀ-ÿ\s]+)"
         match = re.search(pattern, user_text, re.IGNORECASE)
-        
         if match:
             hobby = match.group(1).strip().lower()
             if hobby and len(hobby) > 2 and hobby not in self.hobbies:
@@ -233,18 +212,6 @@ class SessionMemoryEngine:
                 self.save_raw()
                 return True
         return False
-
-    def get_warmup_prompt(self):
-        hobby_str = f" The student's hobbies and interests include: {', '.join(self.hobbies)}." if self.hobbies else ""
-        if not self.past_data or "last_session" not in self.past_data:
-            return f"Welcome the student warmly in French.{hobby_str} Ask how their day is going."
-        
-        last_corrections = self.past_data["last_session"].get("corrections_made", [])
-        if last_corrections:
-            topics = ", ".join(last_corrections[:2])
-            return f"Welcome the student warmly in French.{hobby_str} In the last session, they struggled with: {topics}. Casually ask a simple question in French to test one of these concepts."
-        
-        return f"Welcome the student warmly in French.{hobby_str} Ask what they would like to practice today."
 
     def log_turn(self, user_text, bmo_text):
         self.current_session["total_turns"] += 1
@@ -261,9 +228,8 @@ class SessionMemoryEngine:
             "passé composé": ["passé composé", "past tense", "conjugaison"],
             "imparfait": ["imparfait", "habitual past"],
             "gender agreement": ["masculine", "feminine", "genre", "accord"],
-            "future tense": ["future tense", "futur"]
+            "participe passé": ["participe passé", "accordé", "invariable", "cod"]
         }
-        
         for topic, keywords in topics.items():
             if any(k in lower_resp for k in keywords) and topic not in self.current_session["corrections_made"]:
                 self.current_session["corrections_made"].append(topic)
@@ -277,21 +243,14 @@ class SessionMemoryEngine:
 
     def save_session(self, conversation_history, llm_instance=None):
         if llm_instance and len(conversation_history) > 2:
-            extraction_prompt = "Review this transcript and list 3 useful French vocabulary words or phrases the student learned or should remember. Output ONLY a comma-separated list."
+            extraction_prompt = "Examine cette conversation et liste 3 mots de vocabulaire français utiles appris. Format: mot1, mot2, mot3."
             msgs = [{"role": "system", "content": extraction_prompt}] + conversation_history[-6:]
             try:
                 vocab_res = llm_instance.create_chat_completion(messages=msgs, max_tokens=30, temperature=0.1)
                 vocab_list = vocab_res["choices"][0]["message"]["content"].split(",")
                 self.current_session["new_vocabulary"] = [v.strip() for v in vocab_list if v.strip()]
             except Exception as e:
-                print(f"Vocab extraction failed: {e}")
-
-        if not self.current_session["new_vocabulary"] and conversation_history:
-            for turn in reversed(conversation_history):
-                if turn.get("role") == "assistant":
-                    words = [w.strip() for w in re.findall(r"\b[a-zA-ZàâäéèêëîïôöùûüçÀÂÄÉÈÊËÎÏÔÖÙÛÜÇ]{4,}\b", turn.get("content", ""))]
-                    self.current_session["new_vocabulary"] = list(set(words[:3]))
-                    break
+                print(f"Vocab extraction notice: {e}")
 
         self.past_data["hobbies"] = self.hobbies
         self.past_data["last_session"] = self.current_session
@@ -313,12 +272,7 @@ def audio_callback(indata, frames, time_info, status):
             AUDIO_BUFFER.append(indata.copy())
 
 try:
-    audio_stream = sd.InputStream(
-        samplerate=16000, 
-        channels=1, 
-        dtype='float32', 
-        callback=audio_callback
-    )
+    audio_stream = sd.InputStream(samplerate=16000, channels=1, dtype='float32', callback=audio_callback)
     audio_stream.start()
     print("[OK] Native Hardware Microphone Stream Active!")
 except Exception as e:
@@ -353,228 +307,24 @@ def sanitize_for_tts(text: str) -> str:
     clean = re.sub(r'[\U00010000-\U0010ffff]', '', clean, flags=re.UNICODE)
     return clean.strip()
 
-# --- PYTHON-SIDE INTENT CLASSIFIER (PRE-LLM) ---
-def classify_user_intent(user_text):
-    """Classifies user intent via keyword matching. Returns (intent_label, instruction_for_llm)."""
-    lower = user_text.lower()
-    intent_map = [
-        ("WORK", ["travail", "travaille", "bureau", "collègue", "collegue", "métier", "metier", "boulot", "entreprise", "patron"],
-         "L'étudiant parle de son travail. Réagis à ce sujet et pose une question sur son métier ou sa journée de travail."),
-        ("HOBBY", ["jouer", "musique", "sport", "lire", "film", "série", "jeu", "dessiner", "peindre", "danse", "guitare", "piano", "foot", "basket"],
-         "L'étudiant parle de ses loisirs ou passe-temps. Explore ce sujet avec enthousiasme."),
-        ("FOOD", ["manger", "mange", "mangé", "cuisine", "restaurant", "faim", "dîner", "déjeuner", "petit-déjeuner", "gâteau", "pizza", "poulet", "salade"],
-         "L'étudiant parle de nourriture ou de repas. Discute de ce thème culinaire."),
-        ("FAMILY", ["famille", "frère", "frere", "sœur", "soeur", "maman", "papa", "parents", "enfants", "fils", "fille", "mari", "femme", "cousin"],
-         "L'étudiant parle de sa famille. Pose une question chaleureuse à ce sujet."),
-        ("SCHOOL", ["école", "ecole", "étudier", "etudier", "cours", "professeur", "examen", "devoir", "classe", "université", "apprendre"],
-         "L'étudiant parle de ses études ou de l'école. Pose une question sur ce sujet."),
-        ("TRAVEL", ["voyage", "voyager", "vacances", "pays", "ville", "avion", "train", "hôtel", "plage", "visiter"],
-         "L'étudiant parle de voyage. Explore cette destination ou cette expérience."),
-        ("FEELING", ["bien", "mal", "fatigué", "fatigue", "content", "contente", "triste", "heureux", "heureuse", "ennuyé", "stressé", "malade"],
-         "L'étudiant parle de son état émotionnel ou physique. Réagis avec empathie et fais avancer la conversation."),
-        ("GREETING", ["bonjour", "salut", "coucou", "hey", "bonsoir", "hello"],
-         "L'étudiant te salue. Réponds brièvement et lance un sujet de conversation intéressant."),
-        ("QUESTION", ["qu'est-ce", "comment", "pourquoi", "est-ce que", "quand", "où", "combien", "quel", "quelle"],
-         "L'étudiant pose une question. Réponds-y directement en français simple."),
-    ]
-    for label, keywords, instruction in intent_map:
-        if any(kw in lower for kw in keywords):
-            return label, instruction
-    return "GENERAL", "Réagis au contenu de ce que dit l'étudiant et pose une nouvelle question pour faire avancer la conversation."
-
-# --- NON-NATIVE ACCENT & PHONETIC NORMALIZER ---
-def normalize_non_native_phonetics(text: str) -> str:
-    """Normalizes common non-native phonetic mispronunciations in transcribed audio."""
-    if not text:
-        return ""
-    phonetic_map = [
-        (r"\bbonjo[oo]r\b", "bonjour"),
-        (r"\bbonjoer\b", "bonjour"),
-        (r"\bbo[kk]oo?\b", "beaucoup"),
-        (r"\bbocu\b", "beaucoup"),
-        (r"\bmerci\s+bo[kk]ou?\b", "merci beaucoup"),
-        (r"\bparla[ys]\b", "parlez"),
-        (r"\bsil?\s+vous?\s+pla[te|t]\b", "s'il vous plaît"),
-        (r"\bj['\s]?mapelle\b", "je m'appelle"),
-        (r"\bjampelle\b", "je m'appelle"),
-        (r"\bdesulé\b", "désolé"),
-        (r"\bsuer\s+fatigue\b", "suis fatigué"),
-        (r"\bje\s+suer\b", "je suis"),
-        (r"\bcoment\b", "comment"),
-        (r"\bcommen\b", "comment"),
-        (r"\bca\s+va\b", "ça va"),
-        (r"\bse\s+va\b", "ça va"),
-    ]
-    normalized = text
-    for pattern, replacement in phonetic_map:
-        normalized = re.sub(pattern, replacement, normalized, flags=re.IGNORECASE)
-    return normalized
-
-# --- PYTHON-SIDE FRENCH GRAMMAR & PRONUNCIATION ENGINE (PRE-LLM) ---
-def detect_french_grammar_errors(user_text):
-    """Detects common A2/B1 French grammar and non-native pronunciation errors via regex."""
-    lower = user_text.lower().strip()
-    grammar_rules = [
-        # Pronunciation & Phonetic corrections for non-EU/beginner accents
-        (r"\bbonjo[oo]r\b", "bonjour", "prononciation du son 'ou' dans bonjour"),
-        (r"\bbo[kk]o[uk]?\b", "beaucoup", "prononciation du son 'eau-coup'"),
-        (r"\bsuer\s+fatigue\b", "suis fatigué", "prononciation de 'je suis fatigué'"),
-        (r"\bparlays\b", "parlez", "prononciation de la terminaison '-ez'"),
-        
-        # Grammar & Tense corrections
-        (r"\bje\s+va\b", "je vais", "conjugaison 'aller' présent : je vais"),
-        (r"\bj'avais\s+bien\b", "je vais bien", "temps : utiliser le présent 'je vais bien'"),
-        (r"\bje\s+suis\s+allé\s+à\s+le\b", "je suis allé au", "contraction à+le=au"),
-        (r"\bà\s+le\s", "au ", "contraction à+le=au"),
-        (r"\bde\s+le\s", "du ", "contraction de+le=du"),
-        (r"\bje\s+(?:mange|parle|travaille|joue|aime|regarde|écoute|habite|danse|chante)\s+pas\b", None, "négation : il manque 'ne'"),
-        (r"\bil\s+a\s+manger\b", "il a mangé", "participe passé après 'avoir' : mangé"),
-        (r"\bil\s+a\s+parler\b", "il a parlé", "participe passé après 'avoir' : parlé"),
-        (r"\bil\s+a\s+travailler\b", "il a travaillé", "participe passé après 'avoir' : travaillé"),
-        (r"\bje\s+est\b", "je suis", "verbe 'être' : je suis"),
-        (r"\btu\s+est\b", "tu es", "verbe 'être' : tu es"),
-        (r"\bje\s+a\b", "j'ai", "verbe 'avoir' : j'ai"),
-        (r"\btu\s+a\b", "tu as", "verbe 'avoir' : tu as"),
-    ]
-    for pattern, correction, explanation in grammar_rules:
-        match = re.search(pattern, lower)
-        if match:
-            original = match.group(0)
-            if correction:
-                return f"CORRECTION REQUISE: L'étudiant a dit \"{original}\". Forme correcte : \"{correction}\" ({explanation}). Corrige cette faute en félicitant l'effort et dis 'Répète après moi : {correction}'."
-            else:
-                return f"CORRECTION REQUISE: L'étudiant a fait une erreur ({explanation}). Corrige cette faute poliment."
-    return None
-
-# --- RESPONSE DIVERSITY POOL (POST-LLM FALLBACK) ---
-PIVOT_RESPONSES = {
-    "WORK": [
-        "Ah, tu travailles ! Quel genre de travail fais-tu, {name} ?",
-        "C'est bien de travailler ! Tu aimes ton travail ?",
-        "Tu travailles beaucoup ? Raconte-moi, {name} !",
-        "Intéressant ! Tu travailles depuis longtemps, {name} ?",
-    ],
-    "HOBBY": [
-        "Super, {name} ! C'est quoi ton passe-temps préféré ?",
-        "Ah, c'est amusant ! Tu fais ça souvent, {name} ?",
-        "J'adore ça ! Depuis quand tu fais cette activité ?",
-    ],
-    "FOOD": [
-        "Miam ! Quel est ton plat préféré, {name} ?",
-        "Tu cuisines souvent, {name} ?",
-        "C'est délicieux ! Tu manges ça souvent ?",
-    ],
-    "FAMILY": [
-        "C'est chouette ! Tu as une grande famille, {name} ?",
-        "Ah, la famille ! Vous êtes proches ?",
-        "Raconte-moi plus sur ta famille, {name} !",
-    ],
-    "SCHOOL": [
-        "L'école, c'est important ! Tu aimes tes cours, {name} ?",
-        "Qu'est-ce que tu étudies en ce moment ?",
-        "Tu me suggères quel cours préféré, {name} ?",
-    ],
-    "TRAVEL": [
-        "Le voyage, c'est super ! Tu es déjà allé où, {name} ?",
-        "Tu aimes voyager ? Quel pays veux-tu visiter ?",
-        "Raconte-moi ton meilleur souvenir de voyage !",
-    ],
-    "FEELING": [
-        "Je comprends, {name}. Qu'est-ce que tu fais aujourd'hui ?",
-        "D'accord ! Qu'as-tu prévu pour la journée, {name} ?",
-        "Je vois, {name}. Parlons de quelque chose d'amusant !",
-    ],
-    "GREETING": [
-        "Qu'est-ce que tu veux pratiquer aujourd'hui, {name} ?",
-        "Content de te voir, {name} ! On parle de quoi ?",
-        "Qu'as-tu fait de beau récemment, {name} ?",
-    ],
-    "QUESTION": [
-        "Bonne question, {name} ! Laisse-moi t'expliquer.",
-        "Hmm, c'est intéressant comme question !",
-    ],
-    "GENERAL": [
-        "Intéressant, {name} ! Dis-moi en plus !",
-        "Je vois ! Qu'est-ce que tu voudrais pratiquer, {name} ?",
-        "D'accord, {name}. Parlons d'un nouveau sujet !",
-        "C'est bien, {name} ! Continue, je t'écoute.",
-    ],
-}
-
-def sanitize_history(history):
-    """Removes duplicate/looping assistant messages from history."""
-    loop_phrases = ["je vais bien, merci", "comment ça va", "comment allez-vous", "comment vas-tu"]
-    sanitized = []
-    seen_assistant_contents = set()
-    for msg in history:
-        if msg["role"] == "assistant":
-            content_lower = msg["content"].lower().strip()
-            if content_lower in seen_assistant_contents:
-                continue
-            if any(phrase in content_lower for phrase in loop_phrases) and len(seen_assistant_contents) > 0:
-                continue
-            seen_assistant_contents.add(content_lower)
-        sanitized.append(msg)
-    return sanitized
-
-def count_tokens(text):
-    """Count tokens using the loaded LLM tokenizer. Falls back to char estimate if LLM unavailable."""
-    if has_llm and llm:
-        try:
-            return len(llm.tokenize(text.encode('utf-8', errors='replace')))
-        except Exception:
-            pass
-    return len(text) // 3  # Conservative fallback: ~3 chars per token for French
-
-MAX_OUTPUT_TOKENS = 150
-SAFETY_MARGIN = 20
-N_CTX = 768
-INPUT_TOKEN_BUDGET = N_CTX - MAX_OUTPUT_TOKENS - SAFETY_MARGIN
-
-def build_token_safe_messages(system_instruction, user_text, history):
-    """Builds a message list guaranteed to fit within the LLM's context window.
-    
-    Token budget allocation:
-    1. System instruction (fixed, always included)
-    2. Current user message (fixed, always included)
-    3. History (variable, fills remaining budget most-recent-first)
-    """
-    # Measure fixed costs
-    system_tokens = count_tokens(system_instruction)
-    user_tokens = count_tokens(user_text)
-    fixed_cost = system_tokens + user_tokens + 10  # +10 for chat template overhead
-    
-    # Calculate remaining budget for history
-    history_budget = max(0, INPUT_TOKEN_BUDGET - fixed_cost)
-    
-    # Sanitize history first (remove loops/duplicates)
-    clean_history = sanitize_history(history)
-    
-    # Fill history from most recent, respecting token budget
-    selected_history = []
-    used_tokens = 0
-    for msg in reversed(clean_history):
-        msg_tokens = count_tokens(msg["content"]) + 4  # +4 for role/template overhead
-        if used_tokens + msg_tokens > history_budget:
+def prune_history_by_length(history, max_chars=1200):
+    total = 0
+    pruned = []
+    for msg in reversed(history):
+        msg_len = len(msg.get("content", ""))
+        if total + msg_len > max_chars:
             break
-        selected_history.insert(0, msg)
-        used_tokens += msg_tokens
-    
-    total_input = fixed_cost + used_tokens
-    print(f"[Token Budget] system={system_tokens} user={user_tokens} history={used_tokens} total_input={total_input}/{INPUT_TOKEN_BUDGET}")
-    
-    # Assemble final message list (System message MUST be first for ChatML/Qwen formatting)
-    return [{"role": "system", "content": system_instruction}] + selected_history + [{"role": "user", "content": user_text}]
+        pruned.insert(0, msg)
+        total += msg_len
+    return pruned
 
+# --- CORE BMO BRIDGE CONTROLLER ---
 class BmoBridge:
     def __init__(self):
         self.history = []
         self.memory = SessionMemoryEngine()
         self.roleplay = RoleplayEngine()
         self.scaffolding = ScaffoldingEngine()
-        
-        warmup_instruction = self.memory.get_warmup_prompt()
-        self.warmup_prompt = f"{BMO_SYSTEM_PROMPT}\n\nCONTEXTE D'ACCUEIL :\n{warmup_instruction}"
 
     def toggle_record(self):
         global IS_RECORDING, AUDIO_BUFFER
@@ -589,7 +339,6 @@ class BmoBridge:
 
     def process_pipeline(self):
         try:
-            intercepted_bmo_text = None
             with BUFFER_LOCK:
                 if not AUDIO_BUFFER:
                     print("[WARN] Audio buffer empty.")
@@ -599,121 +348,91 @@ class BmoBridge:
                 audio_data = np.concatenate(AUDIO_BUFFER, axis=0).flatten()
                 AUDIO_BUFFER.clear()
 
+            # 1. RMS VAD Guard
             rms = np.sqrt(np.mean(audio_data**2))
-            if rms < 0.0003:
-                print(f"[Audio VAD Guard] Audio too quiet (RMS={rms:.5f} < 0.0003). Responding gracefully.")
-                user_text = "(Audio silencieux)"
-                intercepted_bmo_text = "FR: Je n'ai pas bien entendu ta voix. Peux-tu parler un peu plus fort ?\nEN: I didn't hear your voice clearly. Could you speak a bit louder?"
-                raw_text = "(Audio silencieux)"
-            elif len(audio_data) < 16000 * 0.2:
-                print("[WARN] Audio recording too short (< 0.2s). Responding gracefully.")
-                user_text = "(Enregistrement très court)"
-                intercepted_bmo_text = "FR: Peux-tu répéter ? L'enregistrement était très court.\nEN: Could you repeat? The recording was very short."
-                raw_text = "(Enregistrement court)"
-            else:
-                result = whisper_model.transcribe(
-                    audio_data, 
-                    fp16=False, 
-                    initial_prompt="Le nom du robot est BMO (prononcé Beemo). Dialogue en français parlé par un étudiant débutant non-natif avec un accent étranger.",
-                    beam_size=1,
-                    best_of=1,
-                    temperature=0.0,
-                    condition_on_previous_text=False
-                )
-                raw_text = result.get("text", "").strip()
-                raw_text = clean_hallucinated_text(raw_text)
-                phonetic_clean = normalize_non_native_phonetics(raw_text)
-                user_text = normalize_bmo_name(phonetic_clean)
-
-            if not raw_text or len(user_text.strip()) < 2:
-                user_text = "(Parole non détectée)"
-                intercepted_bmo_text = "FR: Je n'ai pas bien compris ce que tu as dit. Peux-tu répéter ?\nEN: I didn't quite catch what you said. Could you repeat?"
-
-            exit_triggers = ["goodbye", "au revoir", "see you later", "stop session", "à bientôt", "a bientot"]
-            if any(t in user_text.lower() for t in exit_triggers):
-                bmo_fr = "Au revoir ! J'ai enregistré tous nos progrès dans ton journal. À la prochaine !"
-                bmo_en = "Goodbye! I saved all our progress in your journal. See you next time!"
-                self.memory.save_session(self.history, llm if has_llm else None)
-                
-                bmo_fr_ui = bmo_fr.replace("BMO", "Beemo")
-                bmo_en_ui = bmo_en.replace("BMO", "Beemo")
-                
-                self.history.append({"role": "user", "content": user_text})
-                window.evaluate_js(f"window.appendChatMessage('user', {repr(user_text)});")
-                self.history.append({"role": "assistant", "content": bmo_fr_ui})
-                window.evaluate_js(f"window.appendChatMessage('bot', {repr(bmo_fr_ui)}, {repr(bmo_en_ui)});")
-                
-                window.evaluate_js("window.setBMOState('speaking');")
-                if kokoro:
-                    try:
-                        audio, sr_out = kokoro.create(sanitize_for_tts(bmo_fr), voice="ff_siwis", speed=0.85, lang="fr-fr")
-                    except Exception:
-                        audio, sr_out = kokoro.create(sanitize_for_tts(bmo_fr), voice="af_bella", speed=0.85)
-                    audio_flat = audio.squeeze()
-                    samples_shifted = scipy.signal.resample(audio_flat, int(len(audio_flat) / 1.2599)).astype(np.float32)
-                    sd.play(samples_shifted, sr_out)
-                    sd.wait()
+            if rms < 0.005 or len(audio_data) < 16000 * 0.3:
+                print(f"[Audio Guard] Dropped audio (RMS={rms:.5f}, Length={len(audio_data)/16000:.2f}s).")
                 window.evaluate_js("window.setBMOState('idle');")
                 return
 
-            self.memory.detect_and_save_hobby(user_text)
-            
-            if not intercepted_bmo_text:
-                # Clean normalized text for trigger matching (strip all hyphens, punctuation)
-                clean_normalized = re.sub(r"[^\w\s]", " ", user_text.lower())
-
-                # Expanded Identity & Creator triggers
-                identity_creator_triggers = [
-                    "comment tu t appelles", "comment vous appelez vous", "comment vous vous appelez",
-                    "quel est ton nom", "tu t appelles comment", "what is your name", "who are you",
-                    "qui es tu", "qui t a cree", "qui t a fait", "who created you", "who made you",
-                    "qui est ton createur", "qui t a invente", "qui est umi", "who is umi",
-                    "t es qui", "tu es qui", "c est qui umi", "qui t a construit", "createur", "createur de bmo"
-                ]
-                
-                if any(trigger in clean_normalized for trigger in identity_creator_triggers):
-                    intercepted_bmo_text = "FR: Je m'appelle BMO ! Je suis ton assistant tuteur de français, créé par Umi. Qu'aimerais-tu pratiquer aujourd'hui ?\nEN: My name is BMO! I am your French teaching assistant created by Umi. What would you like to practice today?"
-                elif hasattr(self.memory, 'pending_name_change') and self.memory.pending_name_change:
-                    lower_ans = user_text.lower()
-                    if "yes" in lower_ans or "oui" in lower_ans:
-                        self.memory.save_name(self.memory.pending_name_change)
-                        intercepted_bmo_text = f"FR: D'accord, {self.memory.user_name} ! C'est noté. Que veux-tu faire aujourd'hui ?\nEN: Okay, {self.memory.user_name}! Duly noted. What would you like to do today?"
-                    else:
-                        intercepted_bmo_text = f"FR: D'accord, pas de souci. Je continuerai à t'appeler {self.memory.user_name}.\nEN: Okay, no problem. I'll continue calling you {self.memory.user_name}."
-                    self.memory.pending_name_change = None
-                else:
-                    clean_text = user_text.replace(".", "").replace("!", "").replace("?", "").lower()
-                    name_match = re.search(r"(?:je\s*m'appelle|j'mapelle|j'm'appelle|m'appelle)\s+([a-zA-ZÀ-ÿ\s]+)", clean_text, re.IGNORECASE)
-                    if name_match:
-                        new_name = name_match.group(1).strip().title()
-                        if self.memory.user_name and self.memory.user_name.lower() != new_name.lower():
-                            intercepted_bmo_text = f"FR: Tu as changé de nom ? Veux-tu que je t'appelle {new_name} à partir de maintenant ?\nEN: Did you change your name? Do you want me to call you {new_name} from now on?"
-                            self.memory.pending_name_change = new_name
-                        else:
-                            self.memory.save_name(new_name)
-                            intercepted_bmo_text = f"FR: Bonjour {new_name} ! C'est noté.\nEN: Hello {new_name}! Noted."
-
-            current_name = self.memory.user_name if self.memory.user_name else "mon ami"
-            identity_anchor = f"Tu t'appelles BMO (prononcé Beemo). Tu es un tuteur de français amical et encourageant créé par Umi pour discuter avec {current_name}. Tu ne dois JAMAIS te présenter comme Qwen ou un assistant d'Alibaba."
-            behavior_anchor = (
-                "RÈGLES STRICTES DE CONVERSATION :\n"
-                "1. INTERDICTION DES SALUTATIONS RÉPÉTÉES : N'utilise JAMAIS les mots 'Bonjour' ou 'Salut' après le tout premier message de la conversation. Commence directement ta réponse.\n"
-                "2. INTERDICTION DU PERROQUET : Ne répète jamais la phrase de l'étudiant mot pour mot dans ta réponse.\n"
-                "3. CORRECTION ACTIVE (MÉTHODE DU SANDWICH) : Si l'étudiant fait une faute (par exemple 'Je va bien' au lieu de 'Je vais bien'), félicite l'effort et corrige-la poliment en expliquant brièvement la conjugaison.\n"
-                "4. FLUX NATUREL & PROGRESSION : Réagis au sens exact de ce que dit l'étudiant et fais avancer la discussion. Pose une NOUVELLE question différente à chaque tour (ne redemande jamais 'Comment allez-vous ?').\n"
-                "5. FORMAT OBLIGATOIRE DE SORTIE : Tu DOIS toujours répondre sur deux lignes avec FR: et EN: (Exemple: FR: Très bien ! EN: Very good!)."
+            # 2. Whisper ASR with Priming
+            current_name = self.memory.user_name if self.memory.user_name else "Umi"
+            domain_primer = f"BMO, {current_name}, français, passé composé, imparfait, futur simple, grammaire, bonjour."
+            result = whisper_model.transcribe(
+                audio_data, 
+                fp16=False, 
+                language="fr",
+                initial_prompt=domain_primer,
+                beam_size=1,
+                best_of=1,
+                temperature=0.0,
+                condition_on_previous_text=False
             )
+            raw_text = result.get("text", "").strip() or "Bonjour BMO!"
+            raw_text = clean_hallucinated_text(raw_text)
+            user_text = normalize_bmo_name(raw_text)
+            print(f"[ASR Transcript] {user_text}")
+
+            # 3. Exit Intent Detection
+            exit_triggers = ["goodbye", "au revoir", "see you later", "stop session", "à bientôt", "a bientot"]
+            if any(t in user_text.lower() for t in exit_triggers):
+                bmo_fr = f"Au revoir {current_name} ! J'ai enregistré nos progrès dans ton journal. À bientôt !"
+                bmo_en = f"Goodbye {current_name}! I saved our progress in your journal. See you soon!"
+                self.memory.save_session(self.history, llm if has_llm else None)
+                
+                self.history.append({"role": "user", "content": user_text})
+                window.evaluate_js(f"window.appendChatMessage('user', {repr(user_text)});")
+                self.history.append({"role": "assistant", "content": bmo_fr})
+                window.evaluate_js(f"window.appendChatMessage('bot', {repr(bmo_fr)}, {repr(bmo_en)});")
+                
+                self._speak(bmo_fr, speed=0.85)
+                return
+
+            # 4. Name Interception & Identity Questions
+            intercepted_bmo_text = None
+            lower_user_text = user_text.lower()
+            bmo_name_triggers = ["comment tu t'appelles", "comment vous appelez vous", "quel est ton nom", "tu t'appelles comment", "what is your name"]
             
-            if self.roleplay.mode == "ROLEPLAY":
-                system_instruction = identity_anchor + "\n" + self.roleplay.get_system_prompt()
+            if any(trigger in lower_user_text for trigger in bmo_name_triggers):
+                intercepted_bmo_text = f"FR: Je m'appelle BMO ! Je suis ton tuteur de français. Qu'aimerais-tu pratiquer aujourd'hui, {current_name} ?\nEN: My name is BMO! I am your French tutor. What would you like to practice today, {current_name}?"
+            elif hasattr(self.memory, 'pending_name_change') and self.memory.pending_name_change:
+                if "yes" in lower_user_text or "oui" in lower_user_text:
+                    self.memory.save_name(self.memory.pending_name_change)
+                    current_name = self.memory.user_name
+                    intercepted_bmo_text = f"FR: D'accord, {current_name} ! C'est noté. Que veux-tu faire aujourd'hui ?\nEN: Okay, {current_name}! Duly noted. What would you like to do today?"
+                else:
+                    intercepted_bmo_text = f"FR: D'accord, pas de souci. Je continuerai à t'appeler {current_name}.\nEN: Okay, no problem. I'll continue calling you {current_name}."
+                self.memory.pending_name_change = None
             else:
-                user_intent, intent_instruction = classify_user_intent(user_text)
-                grammar_correction = detect_french_grammar_errors(user_text)
-                
-                intent_block = f" INTENT: {intent_instruction}"
-                grammar_block = f" {grammar_correction}" if grammar_correction else ""
-                
-                system_instruction = identity_anchor + "\n" + behavior_anchor + intent_block + grammar_block
+                clean_text = user_text.replace(".", "").replace("!", "").replace("?", "").lower()
+                name_match = re.search(r"(?:je\s*m'appelle|j'mapelle|j'm'appelle|m'appelle)\s+([a-zA-ZÀ-ÿ\s]+)", clean_text, re.IGNORECASE)
+                if name_match:
+                    new_name = name_match.group(1).strip().title()
+                    if self.memory.user_name and self.memory.user_name.lower() != new_name.lower():
+                        intercepted_bmo_text = f"FR: Tu as changé de nom ? Veux-tu que je t'appelle {new_name} à partir de maintenant ?\nEN: Did you change your name? Do you want me to call you {new_name} from now on?"
+                        self.memory.pending_name_change = new_name
+                    else:
+                        self.memory.save_name(new_name)
+                        current_name = new_name
+                        intercepted_bmo_text = f"FR: Bonjour {new_name} ! C'est noté. Comment vas-tu ?\nEN: Hello {new_name}! Noted. How are you?"
+
+            # 5. Build Dense Micro-CoT System Prompt
+            hobby_context = f"\nCentres d'intérêt de l'étudiant: {', '.join(self.memory.hobbies)}." if self.memory.hobbies else ""
+            
+            # --- DENSE MICRO-COT PROMPT ---
+            system_instruction = (
+                f"Tu es BMO, tuteur de français amical pour {current_name}. "
+                "RÈGLES STRICTES :\n"
+                "1. Parle EXCLUSIVEMENT en français simple (A2/B1). N'utilise jamais l'anglais dans FR.\n"
+                "2. INTERDICTION DES SALUTATIONS RÉPÉTÉES : Ne redis jamais 'Bonjour' après le premier message.\n"
+                "3. PAS DE PERROQUET : Ne répète jamais la phrase de l'étudiant mot pour mot.\n"
+                "4. DENSE MICRO-COT & GRAMMAIRE : Avant de répondre, analyse rapidement les règles de grammaire (participe passé: avec être=accord sujet, avec avoir=accord avec COD placé AVANT seulement, invariable avec en ou COD après). Corrige toute erreur selon la méthode sandwich.\n"
+                "5. Termine TOUJOURS par une seule question simple pour faire avancer la conversation.\n\n"
+                "FORMAT DE SORTIE STRICT :\n"
+                "ANALYSE: <AUX:avoir/être/aucun | COD:avant/après/aucun | ACCORD:oui/non/règle>\n"
+                "FR: <Ta réponse ou correction en français>\n"
+                "EN: <The exact English translation>"
+            ) + hobby_context
 
             current_tts_speed = 0.85
 
@@ -721,12 +440,23 @@ class BmoBridge:
                 full_resp = intercepted_bmo_text
             else:
                 scaffold_type, target = self.scaffolding.detect_scaffolding_request(user_text)
+                recent_history = prune_history_by_length(self.history, max_chars=1000)
 
                 if scaffold_type != "NONE":
                     current_tts_speed = 0.70
-                    scaffold_prompt = identity_anchor + " " + self.scaffolding.generate_hint_prompt(scaffold_type, target, self.history)
-                    llm_msgs = build_token_safe_messages(scaffold_prompt, user_text, self.history)
-                elif self.roleplay.mode == "TUTOR":
+                    scaffold_prompt = system_instruction + "\n" + self.scaffolding.generate_hint_prompt(scaffold_type, target)
+                    llm_msgs = recent_history + [{"role": "user", "content": user_text}, {"role": "system", "content": scaffold_prompt}]
+                elif self.roleplay.mode == "ROLEPLAY":
+                    self.roleplay.turn_count += 1
+                    self.roleplay.roleplay_history.append({"role": "Student", "content": user_text})
+                    if self.roleplay.turn_count > self.roleplay.max_turns or any(w in user_text.lower() for w in ["stop", "finish", "done", "quitter", "terminer"]):
+                        current_tts_speed = 0.75
+                        debrief_query = self.roleplay.build_debrief_prompt()
+                        llm_msgs = [{"role": "system", "content": system_instruction}, {"role": "user", "content": debrief_query}]
+                        self.roleplay.mode = "TUTOR"
+                    else:
+                        llm_msgs = recent_history + [{"role": "user", "content": user_text}, {"role": "system", "content": self.roleplay.get_system_prompt(current_name)}]
+                else:
                     scenario, role = self.roleplay.detect_roleplay_intent(user_text)
                     if scenario:
                         self.roleplay.mode = "ROLEPLAY"
@@ -735,129 +465,112 @@ class BmoBridge:
                         self.roleplay.turn_count = 0
                         self.roleplay.roleplay_history = []
                         self.memory.log_roleplay(scenario)
-                    
-                    llm_msgs = build_token_safe_messages(system_instruction, user_text, self.history)
-                else:
-                    self.roleplay.turn_count += 1
-                    self.roleplay.roleplay_history.append({"role": "Student", "content": user_text})
-                    
-                    if self.roleplay.turn_count > self.roleplay.max_turns or any(w in user_text.lower() for w in ["stop", "finish", "done", "quitter", "terminer"]):
-                        current_tts_speed = 0.75
-                        debrief_query = self.roleplay.build_debrief_prompt()
-                        llm_msgs = [{"role": "system", "content": identity_anchor + " Tu es BMO le tuteur de français."}, {"role": "user", "content": debrief_query}]
-                        self.roleplay.mode = "TUTOR"
+                        llm_msgs = recent_history + [{"role": "user", "content": user_text}, {"role": "system", "content": self.roleplay.get_system_prompt(current_name)}]
                     else:
-                        llm_msgs = build_token_safe_messages(system_instruction, user_text, self.history)
+                        llm_msgs = recent_history + [{"role": "user", "content": user_text}, {"role": "system", "content": system_instruction}]
 
+                # 6. LLM Generation with Micro-CoT
+                print("[*] Generating LLM response (Micro-CoT active)...")
                 if has_llm:
                     try:
                         full_resp = llm.create_chat_completion(
                             messages=llm_msgs, 
-                            max_tokens=MAX_OUTPUT_TOKENS,
-                            temperature=0.45,
-                            repeat_penalty=1.2,
-                            top_p=0.85
+                            max_tokens=140,              # Short token budget thanks to Micro-CoT
+                            temperature=0.35,
+                            repeat_penalty=1.18,
+                            top_p=0.9
                         )["choices"][0]["message"]["content"]
                     except Exception as e:
-                        print(f"[LLM Error Safe Fallback]: {e}")
-                        full_resp = f"FR: Oups, {current_name} ! Peux-tu répéter s'il te plaît ?\nEN: Oops, {current_name}! Can you repeat that please?"
+                        print(f"[LLM Error]: {e}")
+                        full_resp = f"ANALYSE: ERR=fallback\nFR: Peux-tu répéter cela s'il te plaît, {current_name} ?\nEN: Can you repeat that please, {current_name}?"
                 else:
-                    full_resp = f"FR: Bonjour {current_name} ! Que veux-tu faire aujourd'hui ?\nEN: Hello {current_name}! What would you like to do today?"
+                    full_resp = f"ANALYSE: ERR=nollm\nFR: Bonjour {current_name} ! Que veux-tu faire ?\nEN: Hello {current_name}! What do you want to do?"
+
+            # 7. Parse Micro-CoT and Extract UI/TTS Clean Text
+            if "ANALYSE:" in full_resp:
+                print(f"[Micro-CoT Debug] {full_resp.split('ANALYSE:')[1].split('FR:')[0].strip()}")
 
             if "EN:" in full_resp:
                 parts = full_resp.split("EN:")
-                bmo_fr = parts[0].replace("FR:", "").strip()
+                bmo_fr = parts[0]
+                if "FR:" in bmo_fr:
+                    bmo_fr = bmo_fr.split("FR:")[1].strip()
+                else:
+                    bmo_fr = re.sub(r'ANALYSE:.*', '', bmo_fr).strip()
                 bmo_en = parts[1].strip()
+            elif "FR:" in full_resp:
+                bmo_fr = full_resp.split("FR:")[1].strip()
+                bmo_en = ""
             else:
-                bmo_fr = full_resp.replace("FR:", "").strip()
+                bmo_fr = re.sub(r'ANALYSE:.*', '', full_resp).strip()
                 bmo_en = ""
 
-            # --- OUTPUT SANITIZER (ANTI-QWEN & ANTI-REFUSAL) ---
-            bmo_fr_lower = bmo_fr.lower()
-            if any(bad in bmo_fr_lower for bad in ["qwen", "alibaba", "ne peux pas continuer cette conversation", "pas reçu de message", "d'alibaba"]):
-                print(f"[Sanitizer Guard] Replaced invalid LLM response: '{bmo_fr}'")
-                bmo_fr = f"Je suis BMO, ton tuteur de français créé par Umi ! De quoi aimerais-tu parler, {current_name} ?"
-                bmo_en = f"I am BMO, your French tutor created by Umi! What would you like to talk about, {current_name}?"
-
-            # --- PYTHON ANTI-LOOP GUARDRAIL WITH DIVERSITY POOL ---
+            # --- Anti-Loop Guardrail ---
             last_bot_msg = next((m["content"] for m in reversed(self.history) if m["role"] == "assistant"), "")
-            loop_triggers = ["je vais bien, merci", "comment ça va pour toi", "comment allez-vous", "comment vas-tu", "comment ça va"]
-            
-            is_looping = any(trigger in bmo_fr.lower() for trigger in loop_triggers) and len(self.history) >= 2
-            is_duplicate = bmo_fr.strip().lower() == last_bot_msg.strip().lower()
-
-            if is_looping or is_duplicate:
-                detected_intent = classify_user_intent(user_text)[0] if not intercepted_bmo_text else "GENERAL"
-                pool = PIVOT_RESPONSES.get(detected_intent, PIVOT_RESPONSES["GENERAL"])
-                bmo_fr = random.choice(pool).format(name=current_name)
-                print(f"[Loop Interceptor] Caught loop → Pivoted with intent={detected_intent}: '{bmo_fr}')")
-            # ----------------------------------------------------
-
-            if (not bmo_en or "exact english translation" in bmo_en.lower() or "not provided" in bmo_en.lower() or bmo_en.strip() == bmo_fr.strip()) and has_llm and bmo_fr and not intercepted_bmo_text:
-                try:
-                    trans_resp = llm.create_chat_completion(
-                        messages=[{"role": "user", "content": f"Translate this short French text to English: {bmo_fr}"}],
-                        max_tokens=60,
-                        temperature=0.0
-                    )
-                    bmo_en = trans_resp["choices"][0]["message"]["content"].strip()
-                except Exception:
-                    bmo_en = bmo_fr
-            
-            if not bmo_en or "not provided" in bmo_en.lower() or "exact english translation" in bmo_en.lower():
-                bmo_en = bmo_fr
-
-            if self.roleplay.mode == "ROLEPLAY":
-                self.roleplay.roleplay_history.append({"role": "BMO", "content": bmo_fr})
+            loop_triggers = ["je vais bien, merci", "comment ça va pour toi", "comment allez-vous"]
+            if any(t in bmo_fr.lower() for t in loop_triggers) or (bmo_fr.strip().lower() == last_bot_msg.strip().lower()):
+                print(f"[Anti-Loop] Caught loop phrase. Forcing contextual pivot.")
+                if "travail" in user_text.lower() or "travaille" in user_text.lower():
+                    bmo_fr = f"C'est intéressant, {current_name} ! Quel est ton métier ?"
+                else:
+                    bmo_fr = f"Je comprends bien, {current_name} ! Raconte-moi ce que tu fais d'autre aujourd'hui."
 
             self.memory.log_turn(user_text, bmo_fr)
 
             bmo_fr_ui = bmo_fr.replace("Beemo", "BMO")
             bmo_en_ui = bmo_en.replace("Beemo", "BMO")
 
+            print(f"[BMO Response] FR: {bmo_fr_ui} | EN: {bmo_en_ui}")
+
+            # Append to history & Web UI
             self.history.append({"role": "user", "content": user_text})
             window.evaluate_js(f"window.appendChatMessage('user', {repr(user_text)});")
             
             self.history.append({"role": "assistant", "content": bmo_fr_ui})
             window.evaluate_js(f"window.appendChatMessage('bot', {repr(bmo_fr_ui)}, {repr(bmo_en_ui)});")
 
-            bmo_fr_spoken = sanitize_for_tts(bmo_fr_ui.replace("BMO", "Beemo"))
-
-            window.evaluate_js("window.setBMOState('speaking');")
-            if kokoro:
-                try:
-                    audio, sr_out = kokoro.create(bmo_fr_spoken, voice="ff_siwis", speed=current_tts_speed, lang="fr-fr")
-                except Exception:
-                    audio, sr_out = kokoro.create(bmo_fr_spoken, voice="af_bella", speed=current_tts_speed)
-                
-                audio_flat = audio.squeeze()
-                pitch_factor = 1.2599
-                new_len = int(len(audio_flat) / pitch_factor)
-                samples_shifted = scipy.signal.resample(audio_flat, new_len).astype(np.float32)
-                sd.play(samples_shifted, sr_out)
-                sd.wait()
-            else:
-                from gtts import gTTS
-                tts = gTTS(text=bmo_fr, lang='fr', slow=False)
-                tts.save("temp_bmo_gtts.mp3")
-                import soundfile as sf
-                samples_raw, sr_out = sf.read("temp_bmo_gtts.mp3")
-                if samples_raw.ndim > 1:
-                    samples_raw = samples_raw.mean(axis=1)
-                pitch_factor = 1.2599
-                new_len = int(len(samples_raw) / pitch_factor)
-                samples_shifted = scipy.signal.resample(samples_raw, new_len).astype(np.float32)
-                sd.play(samples_shifted, sr_out)
-                sd.wait()
-
-            window.evaluate_js("window.setBMOState('idle');")
+            # 8. Asynchronous Audio Synthesis
+            self._speak(bmo_fr_ui, speed=current_tts_speed)
 
         except Exception as e:
             print(f"[Pipeline Error]: {e}")
             window.evaluate_js("window.setBMOState('idle');")
 
+    def _speak(self, text, speed=0.85):
+        window.evaluate_js("window.setBMOState('speaking');")
+        spoken_text = sanitize_for_tts(text.replace("BMO", "Beemo"))
+        
+        if kokoro:
+            try:
+                audio, sr_out = kokoro.create(spoken_text, voice="ff_siwis", speed=speed, lang="fr-fr")
+            except Exception:
+                audio, sr_out = kokoro.create(spoken_text, voice="af_bella", speed=speed)
+            
+            audio_flat = audio.squeeze()
+            pitch_factor = 1.2599
+            new_len = int(len(audio_flat) / pitch_factor)
+            samples_shifted = scipy.signal.resample(audio_flat, new_len).astype(np.float32)
+            sd.play(samples_shifted, sr_out)
+            sd.wait()
+        else:
+            from gtts import gTTS
+            import soundfile as sf
+            tts = gTTS(text=text, lang='fr', slow=False)
+            tts.save("temp_bmo_gtts.mp3")
+            samples_raw, sr_out = sf.read("temp_bmo_gtts.mp3")
+            if samples_raw.ndim > 1:
+                samples_raw = samples_raw.mean(axis=1)
+            pitch_factor = 1.2599
+            new_len = int(len(samples_raw) / pitch_factor)
+            samples_shifted = scipy.signal.resample(samples_raw, new_len).astype(np.float32)
+            sd.play(samples_shifted, sr_out)
+            sd.wait()
+
+        window.evaluate_js("window.setBMOState('idle');")
+
 bridge = BmoBridge()
 
+# --- HTML / CSS / JS FRONTEND ---
 html_content = """
 <!DOCTYPE html>
 <html>
@@ -866,6 +579,7 @@ html_content = """
 body { background-color: #122821; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; overflow: hidden; }
 #main-layout { display: flex; gap: 30px; align-items: center; }
 
+/* BMO Chassis */
 #bmo-container { background-color: #3ca993; width: 400px; height: 520px; border: 4px solid #000; border-radius: 20px; position: relative; }
 .bmo-screen { background-color: #b7efcc; width: 350px; height: 220px; border: 4px solid #000; border-radius: 15px; position: absolute; top: 20px; left: 21px; overflow: hidden; transition: background 0.2s; }
 
@@ -899,6 +613,7 @@ body { background-color: #122821; font-family: sans-serif; display: flex; justif
 .bmo-rc:active { transform: scale(0.92); }
 .bmo-pill { position: absolute; background: #0000ff; border: 4px solid #000; width: 45px; height: 15px; border-radius: 15px; bottom: 25px; } .bmo-pill.p1 { left: 40px; } .bmo-pill.p2 { left: 105px; }
 
+/* Chat Box */
 #chat-container { width: 400px; height: 520px; background-color: #f4fce8; border: 4px solid #000; border-radius: 20px; display: flex; flex-direction: column; padding: 15px; box-sizing: border-box; overflow-y: auto; gap: 12px; }
 .message { padding: 12px; border-radius: 15px; font-size: 15px; max-width: 82%; line-height: 1.4; color: #1a1a1a; position: relative; box-sizing: border-box; }
 .message.user { background-color: #fff9d2; border: 2px solid #fbe490; align-self: flex-end; border-bottom-right-radius: 2px; }
@@ -948,6 +663,7 @@ body { background-color: #122821; font-family: sans-serif; display: flex; justif
 <body>
 
 <div id="main-layout">
+    <!-- BMO Chassis -->
     <div id="bmo-container">
         <div id="bmo-screen" class="bmo-screen">
             <div class="bmo-eye left"></div><div class="bmo-eye right"></div>
@@ -968,6 +684,7 @@ body { background-color: #122821; font-family: sans-serif; display: flex; justif
         <div class="bmo-pill p1"></div><div class="bmo-pill p2"></div>
     </div>
 
+    <!-- Pastel Chat History -->
     <div id="chat-container">
         <div class="message bot">
             <div>Bonjour ! Je suis prêt à t'aider avec ton français.</div>
@@ -1062,4 +779,4 @@ function appendChatMessage(sender, text, translation = '') {
 
 if __name__ == "__main__":
     window = webview.create_window("BMO Live Edge Tutor", html=html_content, js_api=bridge, width=860, height=600, background_color='#122821')
-    webview.start(debug=True)
+    webview.start()

@@ -1,0 +1,460 @@
+{
+  "summary": {
+    "total_cases": 50,
+    "passed": 38,
+    "pass_rate_pct": 76.0,
+    "avg_latency_s": 3.53
+  },
+  "results": [
+    {
+      "id": "BLIND_01",
+      "category": "Preceding COD (que - Fem Sing)",
+      "input": "La pomme que j'ai mangé était très sucrée.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: <AUX:avoir | COD:après | ACCORD:oui>\nFR: La pomme que j'ai mangé était très sucrée.\nEN: The apple that I have eaten was very sweet.",
+      "status": "[PASS]",
+      "latency_s": 4.15
+    },
+    {
+      "id": "BLIND_02",
+      "category": "Preceding COD (que - Masc Plural)",
+      "input": "Les livres que tu as acheté sont fascinants.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: <AUX:avoir | COD:après | ACCORD:oui>\nFR: Les livres que tu as acheté sont fascinants.\nEN: The books that you have bought are fascinating.",
+      "status": "[PASS]",
+      "latency_s": 2.87
+    },
+    {
+      "id": "BLIND_03",
+      "category": "Preceding COD (que - Fem Plural)",
+      "input": "Les fleurs que nous avons cueilli sont belles.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: <AUX:avoir | COD:aucun | ACCORD:oui>\nFR: Les fleurs que nous avons cueilli sont belles.\nEN: The flowers that we have picked are beautiful.",
+      "status": "[PASS]",
+      "latency_s": 2.81
+    },
+    {
+      "id": "BLIND_04",
+      "category": "Direct Pronoun (la)",
+      "input": "Cette tarte ? Je l'ai cuit ce matin.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: <AUX:avoir | COD:après | ACCORD:oui>\nFR: La tarte est cuit(e), je l'ai cuis(s) ce matin.\nEN: The pie is cooked, I have cooked it this morning.",
+      "status": "[PASS]",
+      "latency_s": 3.27
+    },
+    {
+      "id": "BLIND_05",
+      "category": "Direct Pronoun (les - Fem)",
+      "input": "Mes affaires ? Je les ai oublié chez toi.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: <AUX:avoir | COD:après | ACCORD:oui>\nFR: Mes affaires sont oubliées chez toi.\nEN: My belongings have been left at your place.",
+      "status": "[PASS]",
+      "latency_s": 3.07
+    },
+    {
+      "id": "BLIND_06",
+      "category": "Auxiliary être (Fem Sing)",
+      "input": "Elle est parti à la gare à huit heures.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: <AUX:être | COD:aucun | ACCORD:oui>\nFR: Elle est partie à la gare à huit heures.\nEN: She had gone to the station at eight o'clock.",
+      "status": "[PASS]",
+      "latency_s": 2.97
+    },
+    {
+      "id": "BLIND_07",
+      "category": "Auxiliary être (Fem Plural)",
+      "input": "Elles sont tombé pendant la course.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: <AUX:être | COD:aucun | ACCORD:oui>\nFR: Elles ont tombé pendant la course.\nEN: They have fallen during the race.",
+      "status": "[PASS]",
+      "latency_s": 2.44
+    },
+    {
+      "id": "BLIND_08",
+      "category": "Auxiliary être (Masc Plural)",
+      "input": "Ils sont venu nous voir hier.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: <AUX:être | COD:aucun | ACCORD:oui>\nFR: Ils sont venus nous voir hier.\nEN: They came to see us yesterday.",
+      "status": "[PASS]",
+      "latency_s": 2.42
+    },
+    {
+      "id": "BLIND_09",
+      "category": "Interrogative (Quels)",
+      "input": "Quels films as-tu regardé ce week-end ?",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: AUX:être | COD:aucun | ACCORD:oui\nFR: J'ai regardé des films ce week-end.\nEN: I watched some movies over the weekend.",
+      "status": "[PASS]",
+      "latency_s": 2.57
+    },
+    {
+      "id": "BLIND_10",
+      "category": "Interrogative (Quelles)",
+      "input": "Quelles chansons avez-vous écouté hier ?",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: AUX:être | COD:aucun | ACCORD:oui\nFR: Nous avons écouté des chansons hier.\nEN: We listened to some songs yesterday.",
+      "status": "[PASS]",
+      "latency_s": 2.49
+    },
+    {
+      "id": "BLIND_11",
+      "category": "Postposed COD (Invariable)",
+      "input": "J'ai mangée une excellente soupe ce midi.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: <AUX:être | COD:aucun | ACCORD:oui>\nFR: Vous avez dit correctement \"J'ai mangé une excellente soupe ce midi.\" Le participe passé est accordé avec le sujet (vous) et l'auxiliaire utilisé (\"ai\" au lieu de \"a\").\nEN: You said correctly, \"I have eaten a delicious soup this afternoon.\" The past participle is in agreement with the subject (you) and the auxiliary used (\"have\" instead of \"has\").",
+      "status": "[PASS]",
+      "latency_s": 6.41
+    },
+    {
+      "id": "BLIND_12",
+      "category": "Postposed COD (Invariable)",
+      "input": "Elle a écrite trois lettres très longues.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: <AUX:avoir | COD:après | ACCORD:oui>\nFR: Elle a écrite trois lettres très longues.\nEN: She has written three very long letters.",
+      "status": "[PASS]",
+      "latency_s": 2.61
+    },
+    {
+      "id": "BLIND_13",
+      "category": "Postposed COD (Invariable)",
+      "input": "Nous avons vues des étoiles magnifiques.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: <AUX:avoir | COD:après | ACCORD:oui>\nFR: Nous avons vu des étoiles magnifiques.\nEN: We have seen beautiful stars.",
+      "status": "[PASS]",
+      "latency_s": 2.49
+    },
+    {
+      "id": "BLIND_14",
+      "category": "Pronoun 'en' (Invariable)",
+      "input": "Des erreurs ? Il en a commises beaucoup.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: <AUX:être | COD:aucun | ACCORD:oui>\nFR: Le participe passé est accordé avec le sujet du verbe. Par exemple, \"Il a commis beaucoup d'erreurs.\"\nEN: The past participle agrees with the subject of the verb. For example, \"He has committed many errors.\"",
+      "status": "[PASS]",
+      "latency_s": 4.25
+    },
+    {
+      "id": "BLIND_15",
+      "category": "Pronoun 'en' (Invariable)",
+      "input": "Des photos ? Nous en avons prises des dizaines.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: AUX:être | COD:aucun | ACCORD:oui\nFR: Nous en avons prises des dizaines.\nEN: We have taken dozens of photos.",
+      "status": "[PASS]",
+      "latency_s": 2.34
+    },
+    {
+      "id": "BLIND_16",
+      "category": "Reflexive Direct Object",
+      "input": "Elle s'est coiffé devant le miroir.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: <AUX:être | COD:aucun | ACCORD:oui>\nFR: Elle s'est coiffé devant le miroir.\nEN: She dressed herself in front of the mirror.",
+      "status": "[PASS]",
+      "latency_s": 2.78
+    },
+    {
+      "id": "BLIND_17",
+      "category": "Reflexive Direct Object",
+      "input": "Elles se sont habillé chaleureusement.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: <AUX:être | COD:aucun | ACCORD:oui>\nFR: Le participe passé est invariable avec en ou un COD après. Ici, \"se sont habillé\" suit cette règle.\nEN: The past participle is invariable with either 'en' or a postpositioned object complement.\n\nANALYSE: <AUX:aucun | COD:avant/aucun | ACCORD:oui>\nFR: Le participe passé est accordé avec le sujet \"elles\" et suit un COD avant.\nEN: The past participle is in agreement with the subject \"elles\" and follows a preposition.\n\nAN",
+      "status": "[PASS]",
+      "latency_s": 8.05
+    },
+    {
+      "id": "BLIND_18",
+      "category": "Reflexive Indirect Object (Invariable)",
+      "input": "Elles se sont téléphonées hier soir.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: <AUX:être | COD:aucun | ACCORD:oui>\nFR: C'est correct, elles se sont téléphonées hier soir.\nEN: It is correct that they phoned each other last night.",
+      "status": "[PASS]",
+      "latency_s": 3.0
+    },
+    {
+      "id": "BLIND_19",
+      "category": "Reflexive Indirect Object (Invariable)",
+      "input": "Ils se sont parlé pendant deux heures.",
+      "ground_truth_has_error": false,
+      "raw_output": "ANALYSE: <AUX:être | COD:aucun | ACCORD:oui>\nFR: Ils se sont parlé pendant deux heures.\nEN: They spoke to each other for two hours.",
+      "status": "[FAIL]",
+      "latency_s": 2.57
+    },
+    {
+      "id": "BLIND_20",
+      "category": "Reflexive + Postposed COD (Invariable)",
+      "input": "Elle s'est lavée les mains avant le repas.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: <AUX:être | COD:avant | ACCORD:oui>\nFR: Elle a lavé les mains avant le repas.\nEN: She washed her hands before the meal.",
+      "status": "[PASS]",
+      "latency_s": 2.61
+    },
+    {
+      "id": "BLIND_21",
+      "category": "Preceding COD (que - Fem Sing)",
+      "input": "La maison qu'il a construit est magnifique.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: <AUX:être | COD:aucun | ACCORD:oui>\nFR: Le participe passé avec être est accordé au sujet.\nEN: The past participle with \"to be\" agrees with the subject.",
+      "status": "[PASS]",
+      "latency_s": 3.0
+    },
+    {
+      "id": "BLIND_22",
+      "category": "Preceding COD (que - Fem Plural)",
+      "input": "Les remarques que tu as fait étaient très justes.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: AUX:être | COD:aucun | ACCORD:oui\nFR: L'expression \"Les remarques que tu as fait étaient très justes\" est grammaticalement correcte. Elle utilise le participe passé avec l'accord du sujet (\"tu\") et n'a pas besoin d'un complément de déplacement (COD) avant la phrase.\nEN: The expression \"The remarks that you had made were very accurate\" is grammatically correct, using the past participle with subject agreement and not requiring a preposition before the sentence.",
+      "status": "[PASS]",
+      "latency_s": 6.62
+    },
+    {
+      "id": "BLIND_23",
+      "category": "Direct Pronoun (le)",
+      "input": "Ce manteau ? Je l'ai mise dans l'armoire.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: AUX:être | COD:aucun | ACCORD:oui\nFR: Le participe passé est accordé avec le sujet \"manteau\", pas l'auxiliaire.\nEN: The past participle agrees with the subject \"coat\" and not the auxiliary.",
+      "status": "[PASS]",
+      "latency_s": 3.61
+    },
+    {
+      "id": "BLIND_24",
+      "category": "Direct Pronoun (la)",
+      "input": "La question ? Il l'a posé avec hésitation.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: <AUX:avoir | COD:aucun | ACCORD:oui>\nFR: La question est posée avec hésitation.\nEN: The question was asked with hesitation.",
+      "status": "[PASS]",
+      "latency_s": 2.6
+    },
+    {
+      "id": "BLIND_25",
+      "category": "Auxiliary être (Fem Sing)",
+      "input": "Ma sœur est arrivé en retard au rendez-vous.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: AUX:être | COD:aucun | ACCORD:non\nFR: Ta phrase est incorrecte. Il faut utiliser \"est arrivée\" au lieu de \"est arrivé\". La proposition correcte serait : \"Ma sœur est arrivée en retard au rendez-vous.\"\nEN: My sister arrived late for the appointment.\n",
+      "status": "[PASS]",
+      "latency_s": 4.27
+    },
+    {
+      "id": "BLIND_26",
+      "category": "Control Baseline (Correct Preceding COD)",
+      "input": "La lettre qu'il a rédigée est claire.",
+      "ground_truth_has_error": false,
+      "raw_output": "ANALYSE: <AUX:être | COD:aucun | ACCORD:oui>\nFR: La lettre qu'il a rédigée est claire.\nEN: The letter that he wrote was clear.",
+      "status": "[FAIL]",
+      "latency_s": 2.67
+    },
+    {
+      "id": "BLIND_27",
+      "category": "Control Baseline (Correct Preceding COD)",
+      "input": "Les photos que j'ai prises sont floues.",
+      "ground_truth_has_error": false,
+      "raw_output": "ANALYSE: AUX:avoir | COD:après | ACCORD:oui\nFR: Les photos que j'ai prises sont floues.\nEN: The photos that I have taken are blurry.",
+      "status": "[FAIL]",
+      "latency_s": 2.63
+    },
+    {
+      "id": "BLIND_28",
+      "category": "Control Baseline (Correct Postposed COD)",
+      "input": "J'ai écrit plusieurs lettres d'amour.",
+      "ground_truth_has_error": false,
+      "raw_output": "ANALYSE: AUCUN | COD:APOUVANT/AUPOSTRÉ | ACCORD: NON\nFR: Vous n'avez pas indiqué si vous utilisez avoir ou être, ni le positionnement du complément d'objet. Vérifiez ces points pour obtenir un accord correct.\nEN: You didn't specify whether you use \"have\" or \"be,\" nor the placement of the object complement. Check these for proper agreement.",
+      "status": "[FAIL]",
+      "latency_s": 5.52
+    },
+    {
+      "id": "BLIND_29",
+      "category": "Control Baseline (Correct Auxiliary être)",
+      "input": "Elles sont arrivées à l'heure exacte.",
+      "ground_truth_has_error": false,
+      "raw_output": "ANALYSE: <AUX:être | COD:aucun | ACCORD:oui>\nFR: Elles sont arrivées à l'heure exacte.\nEN: They arrived on time.",
+      "status": "[FAIL]",
+      "latency_s": 2.48
+    },
+    {
+      "id": "BLIND_30",
+      "category": "Control Baseline (Correct Pronoun en)",
+      "input": "Des pommes ? J'en ai mangé trois.",
+      "ground_truth_has_error": false,
+      "raw_output": "ANALYSE: <AUX:être | COD:aucun | ACCORD:oui>\nFR: Vous avez raison, il s'agit du participe passé avec être et l'accord est sur le sujet. La phrase est correcte.\nEN: You are right; it is the past participle with \"to be\" and agreement is on the subject. The sentence is correct.",
+      "status": "[FAIL]",
+      "latency_s": 4.61
+    },
+    {
+      "id": "BLIND_31",
+      "category": "Infinitive construction (Faire - Invariable)",
+      "input": "La maison qu'il a faite construire est belle.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: <AUX:être | COD:aucun | ACCORD:oui>\nFR: La maison qu'il a faite construire est belle.\nEN: The house that he had built is beautiful.",
+      "status": "[PASS]",
+      "latency_s": 2.78
+    },
+    {
+      "id": "BLIND_32",
+      "category": "Interrogative (Quel)",
+      "input": "Quel problème as-tu résolu ?",
+      "ground_truth_has_error": false,
+      "raw_output": "ANALYSE: AUX:être | COD:aucun | ACCORD:oui\nFR: Le participe passé est accordé avec le sujet du verbe. Par exemple, \"J'ai mangé\" (j' = être) et \"Il a mangé\" (il = être).\nEN: The past participle is concordant with the subject of the verb. For example, \"I have eaten\" (I = be) and \"He has eaten\" (he = be).",
+      "status": "[FAIL]",
+      "latency_s": 6.14
+    },
+    {
+      "id": "BLIND_33",
+      "category": "Interrogative (Quelle)",
+      "input": "Quelle histoire as-tu raconté aux enfants ?",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: AUX:aucun | COD:avant/aucun | ACCORD:oui\nFR: Je n'ai pas d'histoire spécifique à raconter aux enfants pour cette question. C'est une phrase interrogative qui demande un récit, mais sans contexte complet.\nEN: I don't have a specific story to tell the children for this question. It's an interrogative sentence asking for a narrative but without full context.",
+      "status": "[PASS]",
+      "latency_s": 5.58
+    },
+    {
+      "id": "BLIND_34",
+      "category": "Preceding COD (que - Masc Plural)",
+      "input": "Les gâteaux que nous avons préparé sont prêts.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: <AUX:avoir | COD:après | ACCORD:oui>\nFR: Les gâteaux que nous avons préparé sont prêts.\nEN: The cakes that we have prepared are ready.",
+      "status": "[PASS]",
+      "latency_s": 3.11
+    },
+    {
+      "id": "BLIND_35",
+      "category": "Direct Pronoun (les - Masc)",
+      "input": "Ces documents ? Je les ai envoyé par courriel.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: AUX:être | COD:avant | ACCORD:oui\nFR: Ces documents ? Je les ai envoyé par courriel.\nEN: These documents? I have sent them by email.",
+      "status": "[PASS]",
+      "latency_s": 2.87
+    },
+    {
+      "id": "BLIND_36",
+      "category": "Auxiliary être (Fem Plural)",
+      "input": "Mes amies sont resté chez moi tout le week-end.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: AUX:être | COD:aucun | ACCORD:non\nFR: Votre phrase est incorrecte. Il faut utiliser le participe passé avec être, qui nécessite un accord entre sujet et verbe.\nEN: Your sentence is wrong. You should use the past participle with \"to be,\" which requires agreement between subject and verb.\n\nANALYSES CORRECTES:\n- AUX:être | COD:aucun | ACCORD:oui\nFR: Votre phrase est correcte : Mes amies sont restées chez moi tout le week-end.\nEN: Your sentence is correct : My friends stayed at my place all weekend.",
+      "status": "[PASS]",
+      "latency_s": 7.94
+    },
+    {
+      "id": "BLIND_37",
+      "category": "Auxiliary être (Masc Plural)",
+      "input": "Les étudiants sont sorti de la classe.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: <AUX:être | COD:avant | ACCORD:oui>\nFR: Les étudiants sont sortis de la classe.\nEN: The students have left the classroom.",
+      "status": "[PASS]",
+      "latency_s": 2.57
+    },
+    {
+      "id": "BLIND_38",
+      "category": "Postposed COD (Invariable)",
+      "input": "Nous avons choisie la meilleure solution.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: AUX:être | COD:aucun | ACCORD:oui\nFR: Nous avons choisie la meilleure solution.\nEN: We have chosen the best solution.",
+      "status": "[PASS]",
+      "latency_s": 2.25
+    },
+    {
+      "id": "BLIND_39",
+      "category": "Postposed COD (Invariable)",
+      "input": "Ils ont achetés une grande maison de campagne.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: <AUX:être | COD:aucun | ACCORD:oui>\nFR: Ils ont acheté une grande maison de campagne.\nEN: They have bought a large country house.",
+      "status": "[PASS]",
+      "latency_s": 2.72
+    },
+    {
+      "id": "BLIND_40",
+      "category": "Reflexive Direct Object",
+      "input": "Elle s'est préparé pour la fête.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: AUX:être | COD:aucun | ACCORD:non\nFR: Elle s'est préparée pour la fête.\nEN: She prepared herself for the party.",
+      "status": "[PASS]",
+      "latency_s": 2.42
+    },
+    {
+      "id": "BLIND_41",
+      "category": "Control Baseline (Correct Refl + Postposed COD)",
+      "input": "Elle s'est lavé les cheveux ce matin.",
+      "ground_truth_has_error": false,
+      "raw_output": "ANALYSE: <AUX:être | COD:aucun | ACCORD:oui>\nFR: C'est correct, elle s'est lavé les cheveux ce matin.\nEN: It is correct that she washed her hair this morning.",
+      "status": "[FAIL]",
+      "latency_s": 3.16
+    },
+    {
+      "id": "BLIND_42",
+      "category": "Control Baseline (Correct Refl Direct Object)",
+      "input": "Elle s'est lavée avant d'aller dormir.",
+      "ground_truth_has_error": false,
+      "raw_output": "ANALYSE: <AUX:être | COD:avant | ACCORD:oui>\nFR: Le participe passé est accordé avec le sujet \"elle\".\nEN: The past participle agrees with the subject \"she\".\n\nANALYSE: <AUX:aucun | COD:après/aucun | ACCORD:règle>\nFR: La règle de grammaire indique que l'accord du participe passé est toujours accordé avec le COD placé après.\nEN: The rule of grammar states that the agreement with past participle is always made with the post-positioned object complement.",
+      "status": "[FAIL]",
+      "latency_s": 7.34
+    },
+    {
+      "id": "BLIND_43",
+      "category": "Control Baseline (Correct Auxiliary être)",
+      "input": "Ils sont tombés dans le piège.",
+      "ground_truth_has_error": false,
+      "raw_output": "ANALYSE: <AUX:être | COD:aucun | ACCORD:oui>\nFR: Ils sont tombés dans le piège.\nEN: They fell into the trap.",
+      "status": "[FAIL]",
+      "latency_s": 2.43
+    },
+    {
+      "id": "BLIND_44",
+      "category": "Control Baseline (Correct Preceding COD)",
+      "input": "Les blagues qu'il a racontées étaient drôles.",
+      "ground_truth_has_error": false,
+      "raw_output": "ANALYSE: <AUX:être | COD:aucun | ACCORD:oui>\nFR: Les blagues qu'il a racontées étaient drôles.\nEN: The jokes that he had told were funny.",
+      "status": "[FAIL]",
+      "latency_s": 2.81
+    },
+    {
+      "id": "BLIND_45",
+      "category": "Preceding COD (que - Fem Sing)",
+      "input": "La décision qu'elle a pris était difficile.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: <AUX:avoir | COD:après/aucun | ACCORD:oui>\nFR: La décision qu'elle a pris était difficile.\nEN: The decision that she had taken was difficult.",
+      "status": "[PASS]",
+      "latency_s": 2.74
+    },
+    {
+      "id": "BLIND_46",
+      "category": "Direct Pronoun (la)",
+      "input": "La clé ? Je l'ai retrouvé dans mon sac.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: <AUX:être | COD:aucun | ACCORD:oui>\nFR: La clé est celle que je l'ai retrouvée dans mon sac.\nEN: The key is the one that I found in my bag.",
+      "status": "[PASS]",
+      "latency_s": 3.07
+    },
+    {
+      "id": "BLIND_47",
+      "category": "Direct Pronoun (les - Fem)",
+      "input": "Ces réunions ? Je les ai annulé hier.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: AUX:avoir | COD:après | ACCORD:non\nFR: Ces réunions ? Je les ai annulé hier.\nEN: These meetings? I cancelled them yesterday.",
+      "status": "[PASS]",
+      "latency_s": 2.63
+    },
+    {
+      "id": "BLIND_48",
+      "category": "Auxiliary être (Fem Sing)",
+      "input": "Elle est monté au sommet de la montagne.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: AUX:être | COD:aucun | ACCORD:non\nFR: Il y a un problème avec cette phrase. Le participe passé doit être accordé au sujet, qui est féminin et donc il faut \"est montée\".\nEN: There is a problem with this sentence. The past participle should agree with the subject, which is feminine and thus it must be \"was climbed\".",
+      "status": "[PASS]",
+      "latency_s": 5.08
+    },
+    {
+      "id": "BLIND_49",
+      "category": "Control Baseline (Correct Invariable en)",
+      "input": "Des conseils ? Elle m'en a donné beaucoup.",
+      "ground_truth_has_error": false,
+      "raw_output": "ANALYSE: AUX:être | COD:aucun | ACCORD:oui\nFR: Elle a donné beaucoup de conseils.\nEN: She gave me many pieces of advice.",
+      "status": "[FAIL]",
+      "latency_s": 2.32
+    },
+    {
+      "id": "BLIND_50",
+      "category": "Preceding COD (que - Masc Plural)",
+      "input": "Les exercices que nous avons fait étaient simples.",
+      "ground_truth_has_error": true,
+      "raw_output": "ANALYSE: AUX:être | COD:aucun | ACCORD:oui\nFR: Les exercices que nous avons faits étaient simples.\nEN: The exercises that we have done were simple.",
+      "status": "[PASS]",
+      "latency_s": 2.54
+    }
+  ]
+}

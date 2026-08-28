@@ -32,6 +32,8 @@ temp_*.mp3
 *.lnk
 *.zip
 session_review.json
+/energy_vs_models.png
+/fpo_vs_accuracy.png
 
 # System files
 .DS_Store
