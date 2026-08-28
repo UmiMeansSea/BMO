@@ -18,23 +18,22 @@ plt.rcParams.update({
 
 ASSETS_DIR = Path(__file__).parent.parent / "assets"
 ASSETS_DIR.mkdir(exist_ok=True)
-ROOT_DIR = Path(__file__).parent.parent
 
 def generate_plots():
-    # Chart 1: Master Composite 1x3 Figure
+    # --- 1. Master Composite 1x3 Figure for 7B ---
     fig, axes = plt.subplots(1, 3, figsize=(18, 5))
     
-    models_acc = ["1.5B\n(Zero-Shot)", "1.5B\n(Few-Shot)", "3B\n(Direct)", "BMO 3B\n(Micro-CoT)"]
-    pass_rates = [40, 50, 50, 76]
+    models_acc = ["1.5B\nZero-Shot", "3B\nBaseline", "3B\nMicro-CoT", "7B\nMicro-CoT"]
+    pass_rates = [40.0, 20.0, 76.0, 76.0]
     sns.barplot(x=models_acc, y=pass_rates, ax=axes[0], hue=models_acc, legend=False, palette="Blues")
-    axes[0].set_title("Pedagogical Accuracy Progression", fontweight="bold")
+    axes[0].set_title("Pedagogical Accuracy Across Eras", fontweight="bold")
     axes[0].set_ylabel("Pass Rate (%)")
     axes[0].set_ylim(0, 100)
     for i, v in enumerate(pass_rates):
         axes[0].text(i, v + 2, f"{v}%", ha="center", fontweight="bold", color="#333333")
         
-    models_lat = ["1.5B", "1.5B\n(GBNF)", "3B\n(Std CoT)", "BMO 3B\n(Micro-CoT)"]
-    latencies = [3.1, 8.1, 13.79, 3.53]
+    models_lat = ["1.5B\nZero-Shot", "3B\nBaseline", "3B\nMicro-CoT", "7B\nMicro-CoT"]
+    latencies = [3.10, 10.40, 3.53, 8.41]
     sns.lineplot(x=models_lat, y=latencies, marker="o", linewidth=2.5, 
                  markersize=8, color="#d95f02", ax=axes[1])
     axes[1].set_title("Average CPU Latency per Sentence", fontweight="bold")
@@ -43,20 +42,19 @@ def generate_plots():
     for i, v in enumerate(latencies):
         axes[1].text(i, v + 0.6, f"{v}s", ha="center", color="#d95f02", fontweight="bold")
 
-    architectures = ["Edge Inference\n(BMO Micro-CoT)", "Cloud API\n(Estimated)"]
-    emissions = [7.10, 343.14]
-    sns.barplot(x=architectures, y=emissions, ax=axes[2], hue=architectures, legend=False, palette=["#1b9e77", "#7570b3"])
+    architectures = ["1.5B Zero-Shot", "3B Baseline", "3B Micro-CoT", "7B Micro-CoT"]
+    emissions = [19.61, 32.10, 7.10, 15.15]
+    sns.barplot(x=architectures, y=emissions, ax=axes[2], hue=architectures, legend=False, palette=["#95a5a6", "#e74c3c", "#1b9e77", "#2563eb"])
     axes[2].set_title("Total Carbon Emissions (200 Turns)", fontweight="bold")
     axes[2].set_ylabel("Emissions (g CO2e)")
-    axes[2].set_yscale("log") 
     for i, v in enumerate(emissions):
-        axes[2].text(i, v * 1.25, f"{v}g", ha="center", fontweight="bold", color="#333333")
+        axes[2].text(i, v + 0.5, f"{v}g", ha="center", fontweight="bold", color="#333333")
 
     plt.tight_layout()
-    plt.savefig(ASSETS_DIR / "bmo_full_benchmark_metrics.png")
+    plt.savefig(ASSETS_DIR / "bmo_full_benchmark_metrics_7b.png")
     plt.close()
 
-    # Chart 2: Error-Type Breakdown
+    # --- 2. Error-Type Breakdown for 7B ---
     fig, ax = plt.subplots(figsize=(10, 6))
     categories = [
         "Future Tense",
@@ -64,9 +62,9 @@ def generate_plots():
         "Passé Composé\nvs. Imparfait",
         "Past Participle\nAgreement"
     ]
-    overall_acc = [70.0, 68.0, 64.0, 76.0]
-    err_detection_acc = [80.0, 40.0, 59.1, 95.0]
-    correct_validation_acc = [60.0, 96.0, 67.9, 57.0]
+    overall_acc = [70.0, 70.0, 68.0, 76.0]
+    err_detection_acc = [80.0, 45.0, 62.0, 95.0]
+    correct_validation_acc = [60.0, 95.0, 74.0, 57.0]
 
     x = np.arange(len(categories))
     width = 0.25
@@ -76,7 +74,7 @@ def generate_plots():
     rects3 = ax.bar(x + width, correct_validation_acc, width, label="Correct Validation", color="#2ecc71", alpha=0.85)
 
     ax.set_ylabel("Accuracy / Pass Rate (%)", fontweight="bold")
-    ax.set_title("Pedagogical Accuracy by French Grammar Category (CEFR A2/B1)", fontweight="bold", pad=15)
+    ax.set_title("7B Pedagogical Accuracy by French Grammar Category (CEFR A2/B1)", fontweight="bold", pad=15)
     ax.set_xticks(x)
     ax.set_xticklabels(categories, fontweight="bold")
     ax.set_ylim(0, 110)
@@ -97,17 +95,18 @@ def generate_plots():
 
     ax.legend(loc="upper right", frameon=True, facecolor="white", framealpha=0.9)
     plt.tight_layout()
-    plt.savefig(ASSETS_DIR / "bmo_error_type_breakdown.png")
+    plt.savefig(ASSETS_DIR / "bmo_error_type_breakdown_7b.png")
     plt.close()
 
-    # Chart 3: Efficiency Pareto Frontier
+    # --- 3. Efficiency Pareto Frontier ---
     fig, ax = plt.subplots(figsize=(10, 6))
     variants = [
         {"name": "1.5B (Zero-Shot)", "latency": 3.10, "pass_rate": 40.0, "color": "#95a5a6", "marker": "o"},
         {"name": "1.5B (GBNF)", "latency": 8.10, "pass_rate": 50.0, "color": "#3498db", "marker": "s"},
-        {"name": "3B (Direct)", "latency": 10.57, "pass_rate": 50.0, "color": "#e67e22", "marker": "^"},
+        {"name": "3B (Direct)", "latency": 10.40, "pass_rate": 20.0, "color": "#e67e22", "marker": "^"},
         {"name": "3B (Std CoT)", "latency": 13.79, "pass_rate": 66.0, "color": "#7f8c8d", "marker": "v"},
         {"name": "BMO 3B (Dense Micro-CoT)", "latency": 3.53, "pass_rate": 76.0, "color": "#27ae60", "marker": "*", "size": 250},
+        {"name": "BMO 7B (Dense Micro-CoT)", "latency": 8.41, "pass_rate": 76.0, "color": "#2563eb", "marker": "P", "size": 250},
         {"name": "Cloud API (GPT-4 Est.)", "latency": 2.50, "pass_rate": 88.0, "color": "#8e44ad", "marker": "D"},
     ]
 
@@ -121,8 +120,10 @@ def generate_plots():
                    marker=var["marker"], zorder=5, edgecolors="black", linewidth=1.2)
         
         offset_x, offset_y = 0.35, 1.2
-        if "Dense Micro-CoT" in var["name"]:
+        if "3B (Dense Micro-CoT)" in var["name"]:
             offset_x, offset_y = -0.5, 2.5
+        elif "7B (Dense Micro-CoT)" in var["name"]:
+            offset_x, offset_y = 0.35, 2.5
         elif "Cloud API" in var["name"]:
             offset_x, offset_y = 0.35, -2.5
         elif "3B (Direct)" in var["name"]:
@@ -133,11 +134,11 @@ def generate_plots():
             (var["latency"], var["pass_rate"]),
             xytext=(var["latency"] + offset_x, var["pass_rate"] + offset_y),
             fontsize=10,
-            fontweight="bold" if "Dense Micro-CoT" in var["name"] else "normal",
-            color=var["color"] if "Dense Micro-CoT" in var["name"] else "#2c3e50"
+            fontweight="bold" if "Micro-CoT" in var["name"] else "normal",
+            color=var["color"] if "Micro-CoT" in var["name"] else "#2c3e50"
         )
 
-    bmo_opt = next(v for v in variants if "Dense Micro-CoT" in v["name"])
+    bmo_opt = next(v for v in variants if "3B (Dense Micro-CoT)" in v["name"])
     ax.annotate(
         "Optimal Edge Operating Point\n(76% Acc @ 3.53s CPU Latency)",
         xy=(bmo_opt["latency"], bmo_opt["pass_rate"]),
@@ -153,14 +154,14 @@ def generate_plots():
     ax.set_xlabel("Average CPU Latency per Sentence (Seconds)", fontweight="bold")
     ax.set_ylabel("Pedagogical Pass Rate (%)", fontweight="bold")
     ax.set_xlim(0, 16)
-    ax.set_ylim(30, 95)
+    ax.set_ylim(15, 95)
 
     ax.legend(loc="lower right", frameon=True, facecolor="white")
     plt.tight_layout()
 
-    plt.savefig(ASSETS_DIR / "bmo_pareto_efficiency_frontier.png")
+    plt.savefig(ASSETS_DIR / "bmo_pareto_efficiency_frontier_7b.png", dpi=300)
     plt.close()
-    print("[*] All publication plots updated with empirical Micro-CoT benchmarks!")
+    print("[*] All 7B plots successfully generated and saved to assets/")
 
 if __name__ == "__main__":
     generate_plots()

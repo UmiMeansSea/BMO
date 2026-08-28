@@ -16,27 +16,26 @@ def calculate_inference_fpo(params_billions, avg_tokens):
 
 # Model Benchmark Data
 models = [
-    "BMO Micro-CoT (3B)", 
-    "Unquantized SLM (3B)", 
-    "GPT-2 XL (1.5B)", 
-    "BERT-Large (350M)", 
+    "BMO (3B Baseline)", 
+    "BMO (3B Micro-CoT)", 
+    "BMO (7B Micro-CoT)", 
     "Cloud API Equivalent"
 ]
 
 # Parameters in Billions
-parameters = [3.0, 3.0, 1.5, 0.35, 70.0]
+parameters = [3.4, 3.4, 7.6, 70.0]
 
-# Average tokens per conversational turn (BMO uses Dense Micro-CoT with ~15 reasoning + ~10 answer tokens)
-avg_tokens_per_model = [25, 60, 60, 60, 60]
+# Average tokens per conversational turn
+avg_tokens_per_model = [50, 25, 25, 60]
 
 # Calculate FPO (Billion FPO per inference)
 fpo_values = [calculate_inference_fpo(p, t) for p, t in zip(parameters, avg_tokens_per_model)]
 
 # Pedagogical Pass Rate / Task Accuracy (%)
-accuracy = [66.0, 67.5, 68.0, 62.0, 75.0]
+accuracy = [20.0, 76.0, 76.0, 88.0]
 
 # Energy Consumption per turn (Wh)
-energy_wh = [11.45, 45.0, 38.0, 12.5, 110.0]
+energy_wh = [27.49, 11.45, 24.50, 110.0]
 
 # Directory setup
 assets_dir = Path(__file__).parent.parent / "assets"
@@ -55,16 +54,16 @@ plt.title("Green AI Evaluation: Accuracy vs. Computational Work (FPO)", fontsize
 plt.xlabel("Work per Inference: FPO (Billions)", fontsize=11)
 plt.ylabel("Pedagogical Adherence / Task Accuracy (%)", fontsize=11)
 plt.grid(True, linestyle='--', alpha=0.6)
-plt.axvline(x=fpo_values[0], color='#10b981', linestyle=':', label='BMO Micro-CoT Operating Point (150B FPO)')
+plt.axvline(x=fpo_values[1], color='#10b981', linestyle=':', label='BMO 3B Micro-CoT Operating Point (170B FPO)')
+plt.axvline(x=fpo_values[2], color='#3b82f6', linestyle=':', label='BMO 7B Micro-CoT Operating Point (380B FPO)')
 plt.legend(loc='lower right')
 plt.tight_layout()
-plt.savefig(root_dir / "fpo_vs_accuracy.png", dpi=300)
-plt.savefig(assets_dir / "fpo_vs_accuracy.png", dpi=300)
+plt.savefig(assets_dir / "fpo_vs_accuracy_7b.png", dpi=300)
 plt.close()
 
 # --- PLOT 2: Energy Consumption vs. FPO (Hardware-Agnostic Correlation) ---
 plt.figure(figsize=(9, 6))
-plt.bar(models, energy_wh, color='#3ca993', edgecolor='#000', linewidth=1.5)
+plt.bar(models, energy_wh, color=['#e74c3c', '#3ca993', '#2563eb', '#8e44ad'], edgecolor='#000', linewidth=1.5)
 
 plt.title("Hardware Energy Audit: Runtime Energy Consumption per Turn", fontsize=12, fontweight='bold', pad=15)
 plt.xlabel("Model Architecture", fontsize=11)
@@ -72,11 +71,10 @@ plt.ylabel("Energy Consumption (Wh)", fontsize=11)
 plt.xticks(rotation=15, fontsize=9)
 plt.grid(axis='y', linestyle='--', alpha=0.6)
 plt.tight_layout()
-plt.savefig(root_dir / "energy_vs_models.png", dpi=300)
-plt.savefig(assets_dir / "energy_vs_models.png", dpi=300)
+plt.savefig(assets_dir / "energy_vs_models_7b.png", dpi=300)
 plt.close()
 
-print("[*] Green AI Evaluation graphs successfully generated and saved.")
+print("[*] Green AI Evaluation graphs successfully generated and saved to assets/_7b.png.")
 
 # Print Summary Table
 print("\n" + "="*70)

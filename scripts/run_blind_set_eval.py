@@ -5,9 +5,14 @@ import re
 from pathlib import Path
 from llama_cpp import Llama
 
-_POINTER = Path(__file__).parent.parent / "src" / ".model_path"
-MODEL_PATH = Path(_POINTER.read_text(encoding="utf-8").strip()) if _POINTER.exists() \
-                else Path(r"D:\BMO-Research\models\bmo-model-3b-4bit.gguf")
+MODELS_DIR = Path(r"D:\BMO-Research\models")
+MODEL_PATH = MODELS_DIR / "Qwen2.5-7B-Instruct-Q4_K_M.gguf"
+if not MODEL_PATH.exists():
+    MODEL_PATH = MODELS_DIR / "qwen2.5-7b-instruct-q4_k_m.gguf"
+if not MODEL_PATH.exists():
+    _POINTER = Path(__file__).parent.parent / "src" / ".model_path"
+    MODEL_PATH = Path(_POINTER.read_text(encoding="utf-8").strip()) if _POINTER.exists() \
+                    else MODELS_DIR / "bmo-model-3b-4bit.gguf"
 
 BLIND_SET_PATH = Path(__file__).parent.parent / "data" / "past_participle_blind_set.json"
 
