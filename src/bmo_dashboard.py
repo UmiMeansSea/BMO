@@ -42,7 +42,14 @@ except ImportError:
     pass
 
 MODELS_DIR = Path(r"D:\BMO-Research\models")
-LLM_PATH = MODELS_DIR / "bmo-model-4bit.gguf"
+# bmo_live.py (confirmed working) loads "bmo-model-3b-4bit.gguf" — this file
+# previously pointed at "bmo-model-4bit.gguf" instead, which likely doesn't
+# exist on disk and silently killed the LLM (see has_llm below).
+LLM_PATH = MODELS_DIR / "bmo-model-3b-4bit.gguf"
+if not LLM_PATH.exists():
+    _fallback = sorted(MODELS_DIR.glob("*.gguf"))
+    if _fallback:
+        LLM_PATH = _fallback[0]
 KOKORO_MODEL = MODELS_DIR / "kokoro-v1.0.onnx"
 KOKORO_VOICES = MODELS_DIR / "voices-v1.0.bin"
 
@@ -52,8 +59,11 @@ whisper_model = whisper.load_model("small")
 try:
     llm = Llama(model_path=str(LLM_PATH), n_ctx=512, n_threads=4, verbose=False)
     has_llm = True
+    print(f"[OK] LLM loaded from: {LLM_PATH}")
 except Exception as e:
+    import traceback
     print(f"[!] LLM load notice: {e}")
+    traceback.print_exc()  # check the console for the real cause
     has_llm = False
 
 try:

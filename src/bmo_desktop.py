@@ -3,7 +3,9 @@ import os
 import time
 import re
 import json
+import random
 import threading
+import traceback
 from datetime import datetime
 from pathlib import Path
 import numpy as np
@@ -26,31 +28,51 @@ def normalize_bmo_name(text: str) -> str:
     return pattern.sub("BMO", text)
 
 # --- MODELS SETUP ---
+# NOTE: earlier versions hardcoded exact filenames ("bmo-model-4bit.gguf")
+# that didn't always match what's actually on disk (bmo_live.py uses
+# "bmo-model-3b-4bit.gguf"). A filename mismatch here makes Llama(...) throw
+# FileNotFoundError below, has_llm silently becomes False, and every "reply"
+# you see is actually the hardcoded no-LLM fallback string further down.
+# This version tries the known names first, then falls back to globbing for
+# ANY .gguf file in the models directory so a rename doesn't nuke the app.
 BASE_DIR = Path(getattr(sys, '_MEIPASS', Path(sys.executable).parent))
 LOCAL_MODELS_DIR = BASE_DIR / "models"
+KNOWN_MODEL_NAMES = ["bmo-model-3b-4bit.gguf", "bmo-model-4bit.gguf"]
+FALLBACK_MODELS_DIR = Path(r"D:\BMO-Research\models")
 
-if LOCAL_MODELS_DIR.exists() and (LOCAL_MODELS_DIR / "bmo-model-4bit.gguf").exists():
-    MODELS_DIR = LOCAL_MODELS_DIR
-    LLM_NAME = "bmo-model-4bit.gguf"
-elif Path(r"D:\BMO-Research\models\bmo-model-3b-4bit.gguf").exists():
-    MODELS_DIR = Path(r"D:\BMO-Research\models")
-    LLM_NAME = "bmo-model-3b-4bit.gguf"
-else:
-    MODELS_DIR = Path(r"D:\BMO-Research\models")
-    LLM_NAME = "bmo-model-4bit.gguf"
+def _resolve_model_path() -> Path:
+    for models_dir in (LOCAL_MODELS_DIR, FALLBACK_MODELS_DIR):
+        if not models_dir.exists():
+            continue
+        for name in KNOWN_MODEL_NAMES:
+            candidate = models_dir / name
+            if candidate.exists():
+                return candidate
+        # Nothing with a known name — grab any .gguf so a rename doesn't break us
+        found = sorted(models_dir.glob("*.gguf"))
+        if found:
+            return found[0]
+    # Nothing found anywhere; return the most likely intended path so the
+    # resulting FileNotFoundError message is at least informative.
+    return FALLBACK_MODELS_DIR / KNOWN_MODEL_NAMES[0]
 
-LLM_PATH = MODELS_DIR / LLM_NAME
+LLM_PATH = _resolve_model_path()
+MODELS_DIR = LLM_PATH.parent
 KOKORO_MODEL = MODELS_DIR / "kokoro-v1.0.onnx"
 KOKORO_VOICES = MODELS_DIR / "voices-v1.0.bin"
 
 print(f"[*] Initializing BMO Native Desktop Engine using models from: {MODELS_DIR}")
 whisper_model = whisper.load_model("small")
 
+LLM_LOAD_ERROR = None
 try:
     llm = Llama(model_path=str(LLM_PATH), n_ctx=1024, n_threads=4, verbose=False)
     has_llm = True
+    print(f"[OK] LLM loaded from: {LLM_PATH}")
 except Exception as e:
     print(f"[!] LLM Load Notice: {e}")
+    traceback.print_exc()  # full traceback in console — this is the real cause, check it
+    LLM_LOAD_ERROR = f"{type(e).__name__}: {e}"
     has_llm = False
 
 def _patched_create_audio(self, phonemes, voice, speed):
@@ -506,14 +528,31 @@ class BmoBridge:
                 bmo_en = ""
 
             # --- Anti-Loop Guardrail ---
-            last_bot_msg = next((m["content"] for m in reversed(self.history) if m["role"] == "assistant"), "")
+            # Check against the last THREE bot messages, not just one — a two-line
+            # oscillation (A, B, A, B, ...) still counts as stuck, and only checking
+            # the single previous message lets it slip through every other turn.
+            recent_bot_msgs = [m["content"].strip().lower() for m in reversed(self.history) if m["role"] == "assistant"][:3]
             loop_triggers = ["je vais bien, merci", "comment ça va pour toi", "comment allez-vous"]
-            if any(t in bmo_fr.lower() for t in loop_triggers) or (bmo_fr.strip().lower() == last_bot_msg.strip().lower()):
+            is_looping = (
+                any(t in bmo_fr.lower() for t in loop_triggers)
+                or bmo_fr.strip().lower() in recent_bot_msgs
+            )
+            if is_looping:
                 print(f"[Anti-Loop] Caught loop phrase. Forcing contextual pivot.")
                 if "travail" in user_text.lower() or "travaille" in user_text.lower():
-                    bmo_fr = f"C'est intéressant, {current_name} ! Quel est ton métier ?"
+                    pivot_pool = [
+                        f"C'est intéressant, {current_name} ! Quel est ton métier ?",
+                        f"Ah oui ? Et ça se passe bien pour toi en ce moment ?",
+                    ]
                 else:
-                    bmo_fr = f"Je comprends bien, {current_name} ! Raconte-moi ce que tu fais d'autre aujourd'hui."
+                    pivot_pool = [
+                        f"Je comprends bien, {current_name} ! Raconte-moi ce que tu fais d'autre aujourd'hui.",
+                        f"D'accord ! Et sinon, qu'est-ce que tu as prévu pour la suite ?",
+                        f"Je vois ! Parle-moi d'autre chose, {current_name} — tes loisirs, par exemple ?",
+                    ]
+                # Avoid picking a pivot that's itself already in the recent messages
+                choices = [p for p in pivot_pool if p.strip().lower() not in recent_bot_msgs] or pivot_pool
+                bmo_fr = random.choice(choices)
 
             self.memory.log_turn(user_text, bmo_fr)
 
@@ -777,6 +816,16 @@ function appendChatMessage(sender, text, translation = '') {
 </html>
 """
 
+def _on_window_loaded():
+    if not has_llm:
+        warning_fr = (
+            f"⚠️ Le modèle IA ne s'est pas chargé (chemin essayé : {LLM_PATH}). "
+            f"BMO répond en mode dégradé avec des phrases fixes jusqu'à ce que ce soit corrigé."
+        )
+        warning_en = f"Model load failed ({LLM_LOAD_ERROR}). Check the console for the full traceback."
+        window.evaluate_js(f"window.appendChatMessage('bot', {repr(warning_fr)}, {repr(warning_en)});")
+
 if __name__ == "__main__":
     window = webview.create_window("BMO Live Edge Tutor", html=html_content, js_api=bridge, width=860, height=600, background_color='#122821')
+    window.events.loaded += _on_window_loaded
     webview.start()
