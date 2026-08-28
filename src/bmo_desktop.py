@@ -5,6 +5,7 @@ import re
 import json
 import random
 import threading
+import queue
 import traceback
 from datetime import datetime
 from pathlib import Path
@@ -66,9 +67,10 @@ whisper_model = whisper.load_model("small")
 
 LLM_LOAD_ERROR = None
 try:
-    llm = Llama(model_path=str(LLM_PATH), n_ctx=2048, n_threads=4, verbose=False)
+    n_physical_threads = max(1, (os.cpu_count() or 4) // 2)
+    llm = Llama(model_path=str(LLM_PATH), n_ctx=2048, n_threads=n_physical_threads, verbose=False)
     has_llm = True
-    print(f"[OK] LLM loaded from: {LLM_PATH}")
+    print(f"[OK] LLM loaded from: {LLM_PATH} (bound to {n_physical_threads} physical threads)")
 except Exception as e:
     print(f"[!] LLM Load Notice: {e}")
     traceback.print_exc()  # full traceback in console — this is the real cause, check it
@@ -347,6 +349,27 @@ class BmoBridge:
         self.memory = SessionMemoryEngine()
         self.roleplay = RoleplayEngine()
         self.scaffolding = ScaffoldingEngine()
+        
+        # Zero-Latency Asynchronous Audio Queue
+        self.tts_queue = queue.Queue()
+        self.tts_thread = threading.Thread(target=self._tts_worker_loop, daemon=True)
+        self.tts_thread.start()
+
+    def _tts_worker_loop(self):
+        while True:
+            item = self.tts_queue.get()
+            if item is None:
+                break
+            if isinstance(item, tuple):
+                text, speed = item
+            else:
+                text, speed = item, 0.85
+            try:
+                self._speak(text, speed=speed)
+            except Exception as e:
+                print(f"[TTS Worker Error]: {e}")
+            finally:
+                self.tts_queue.task_done()
 
     def toggle_record(self):
         global IS_RECORDING, AUDIO_BUFFER
@@ -491,18 +514,62 @@ class BmoBridge:
                     else:
                         llm_msgs = [{"role": "system", "content": system_instruction}] + recent_history + [{"role": "user", "content": user_text}]
 
-                # 6. LLM Generation with Micro-CoT
-                print("[*] Generating LLM response (Micro-CoT active)...")
+                # 6. LLM Generation with Zero-Latency Streaming & Micro-CoT Sentence Parsing
+                print("[*] Generating LLM response (Zero-Latency Streaming active)...")
+                streamed_sentence_count = 0
                 if has_llm:
                     try:
-                        full_resp = llm.create_chat_completion(
+                        response_generator = llm.create_chat_completion(
                             messages=llm_msgs, 
                             max_tokens=200,              
                             temperature=0.55,
                             repeat_penalty=1.30,
                             frequency_penalty=0.30,
-                            top_p=0.85
-                        )["choices"][0]["message"]["content"]
+                            top_p=0.85,
+                            stream=True
+                        )
+                        
+                        full_resp = ""
+                        sentence_buffer = ""
+                        found_fr_header = False
+                        
+                        for chunk in response_generator:
+                            delta = chunk["choices"][0]["delta"].get("content", "")
+                            if not delta:
+                                continue
+                            full_resp += delta
+                            
+                            if not found_fr_header and "FR:" in full_resp:
+                                found_fr_header = True
+                                sentence_buffer = full_resp.split("FR:", 1)[1]
+                            elif found_fr_header:
+                                if "EN:" in delta or "EN:" in sentence_buffer:
+                                    if "EN:" in sentence_buffer:
+                                        fr_part = sentence_buffer.split("EN:", 1)[0].strip()
+                                        if fr_part:
+                                            print(f"[Zero-Latency Stream Sentence] {fr_part}")
+                                            self.tts_queue.put((fr_part, current_tts_speed))
+                                            streamed_sentence_count += 1
+                                        sentence_buffer = ""
+                                    found_fr_header = False
+                                else:
+                                    sentence_buffer += delta
+                                    match = re.search(r'([^.!?]+[.!?])', sentence_buffer)
+                                    if match:
+                                        sent = match.group(1).strip()
+                                        if sent:
+                                            print(f"[Zero-Latency Stream Sentence] {sent}")
+                                            self.tts_queue.put((sent, current_tts_speed))
+                                            streamed_sentence_count += 1
+                                        sentence_buffer = sentence_buffer[match.end():]
+                                        
+                        if sentence_buffer and "EN:" not in sentence_buffer:
+                            rem = sentence_buffer.strip()
+                            if rem:
+                                print(f"[Zero-Latency Stream Sentence] {rem}")
+                                self.tts_queue.put((rem, current_tts_speed))
+                                streamed_sentence_count += 1
+
                     except Exception as e:
                         print(f"[LLM Error]: {e}")
                         full_resp = f"ANALYSE: ERR=fallback\nFR: Peux-tu répéter cela s'il te plaît, {current_name} ?\nEN: Can you repeat that please, {current_name}?"
@@ -574,8 +641,9 @@ class BmoBridge:
             self.history.append({"role": "assistant", "content": bmo_fr_ui})
             window.evaluate_js(f"window.appendChatMessage('bot', {repr(bmo_fr_ui)}, {repr(bmo_en_ui)});")
 
-            # 8. Asynchronous Audio Synthesis
-            self._speak(bmo_fr_ui, speed=current_tts_speed)
+            # 8. Asynchronous Audio Synthesis (Queue fallback if non-streamed)
+            if streamed_sentence_count == 0:
+                self.tts_queue.put((bmo_fr_ui, current_tts_speed))
 
         except Exception as e:
             print(f"[Pipeline Error]: {e}")
