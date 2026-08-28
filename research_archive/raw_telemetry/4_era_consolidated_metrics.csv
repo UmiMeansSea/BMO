@@ -1,5 +1,0 @@
-Era_Name,Parameter_Count_B,Quantization,Avg_CPU_Latency_s,Token_Throughput_tps,Work_per_Turn_FPO_B,Energy_per_Turn_Wh,Carbon_200_Turns_gCO2e,Blind_Set_Pass_Rate_pct,Future_Tense_Acc_pct,Gender_Agreement_Acc_pct,Passe_Compose_vs_Imparfait_Acc_pct,Participle_Agreement_Acc_pct
-Era 1: 1.5B (Zero-Shot),1.5,Q4_K_M,3.1,32.2,150.0,19.61,19.61,40.0,50.0,40.0,40.0,30.0
-Era 2: 3B (Baseline),3.4,Q4_K_M,10.4,14.4,340.0,27.49,32.1,20.0,30.0,20.0,20.0,10.0
-Era 3: BMO 3B (Micro-CoT),3.4,Q4_K_M,3.53,28.3,170.0,11.45,7.1,76.0,80.0,80.0,70.0,75.0
-Era 4: BMO 7B (Micro-CoT),7.6,Q4_K_M,8.41,17.8,380.0,24.5,15.15,76.0,80.0,80.0,70.0,75.0

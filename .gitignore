@@ -48,6 +48,9 @@ scripts/zip_release.py
 scripts/evaluate_past_participle_dev.py
 src/local_sanity_check.py
 src/test_20_turns_conv.py
+
+# Research Archive
+research_archive/
 src/test_voice.py
 
 # System files
