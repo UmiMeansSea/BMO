@@ -37,7 +37,7 @@ def normalize_bmo_name(text: str) -> str:
 # ANY .gguf file in the models directory so a rename doesn't nuke the app.
 BASE_DIR = Path(getattr(sys, '_MEIPASS', Path(sys.executable).parent))
 LOCAL_MODELS_DIR = BASE_DIR / "models"
-KNOWN_MODEL_NAMES = ["bmo-model-3b-4bit.gguf", "bmo-model-4bit.gguf"]
+KNOWN_MODEL_NAMES = ["Qwen2.5-7B-Instruct-Q4_K_M.gguf", "qwen2.5-7b-instruct-q4_k_m.gguf", "bmo-model-3b-4bit.gguf", "bmo-model-4bit.gguf"]
 FALLBACK_MODELS_DIR = Path(r"D:\BMO-Research\models")
 
 def _resolve_model_path() -> Path:
@@ -66,7 +66,7 @@ whisper_model = whisper.load_model("small")
 
 LLM_LOAD_ERROR = None
 try:
-    llm = Llama(model_path=str(LLM_PATH), n_ctx=1024, n_threads=4, verbose=False)
+    llm = Llama(model_path=str(LLM_PATH), n_ctx=2048, n_threads=4, verbose=False)
     has_llm = True
     print(f"[OK] LLM loaded from: {LLM_PATH}")
 except Exception as e:
@@ -467,7 +467,7 @@ class BmoBridge:
                 if scaffold_type != "NONE":
                     current_tts_speed = 0.70
                     scaffold_prompt = system_instruction + "\n" + self.scaffolding.generate_hint_prompt(scaffold_type, target)
-                    llm_msgs = recent_history + [{"role": "user", "content": user_text}, {"role": "system", "content": scaffold_prompt}]
+                    llm_msgs = [{"role": "system", "content": scaffold_prompt}] + recent_history + [{"role": "user", "content": user_text}]
                 elif self.roleplay.mode == "ROLEPLAY":
                     self.roleplay.turn_count += 1
                     self.roleplay.roleplay_history.append({"role": "Student", "content": user_text})
@@ -477,7 +477,7 @@ class BmoBridge:
                         llm_msgs = [{"role": "system", "content": system_instruction}, {"role": "user", "content": debrief_query}]
                         self.roleplay.mode = "TUTOR"
                     else:
-                        llm_msgs = recent_history + [{"role": "user", "content": user_text}, {"role": "system", "content": self.roleplay.get_system_prompt(current_name)}]
+                        llm_msgs = [{"role": "system", "content": self.roleplay.get_system_prompt(current_name)}] + recent_history + [{"role": "user", "content": user_text}]
                 else:
                     scenario, role = self.roleplay.detect_roleplay_intent(user_text)
                     if scenario:
@@ -487,9 +487,9 @@ class BmoBridge:
                         self.roleplay.turn_count = 0
                         self.roleplay.roleplay_history = []
                         self.memory.log_roleplay(scenario)
-                        llm_msgs = recent_history + [{"role": "user", "content": user_text}, {"role": "system", "content": self.roleplay.get_system_prompt(current_name)}]
+                        llm_msgs = [{"role": "system", "content": self.roleplay.get_system_prompt(current_name)}] + recent_history + [{"role": "user", "content": user_text}]
                     else:
-                        llm_msgs = recent_history + [{"role": "user", "content": user_text}, {"role": "system", "content": system_instruction}]
+                        llm_msgs = [{"role": "system", "content": system_instruction}] + recent_history + [{"role": "user", "content": user_text}]
 
                 # 6. LLM Generation with Micro-CoT
                 print("[*] Generating LLM response (Micro-CoT active)...")
@@ -497,10 +497,11 @@ class BmoBridge:
                     try:
                         full_resp = llm.create_chat_completion(
                             messages=llm_msgs, 
-                            max_tokens=140,              # Short token budget thanks to Micro-CoT
-                            temperature=0.35,
-                            repeat_penalty=1.18,
-                            top_p=0.9
+                            max_tokens=200,              
+                            temperature=0.55,
+                            repeat_penalty=1.30,
+                            frequency_penalty=0.30,
+                            top_p=0.85
                         )["choices"][0]["message"]["content"]
                     except Exception as e:
                         print(f"[LLM Error]: {e}")
@@ -541,18 +542,23 @@ class BmoBridge:
                 print(f"[Anti-Loop] Caught loop phrase. Forcing contextual pivot.")
                 if "travail" in user_text.lower() or "travaille" in user_text.lower():
                     pivot_pool = [
-                        f"C'est intéressant, {current_name} ! Quel est ton métier ?",
-                        f"Ah oui ? Et ça se passe bien pour toi en ce moment ?",
+                        (f"C'est intéressant, {current_name} ! Quel est ton métier ?", f"That's interesting, {current_name}! What is your job?"),
+                        (f"Ah oui ? Et ça se passe bien pour toi en ce moment ?", f"Oh yeah? And is it going well for you right now?"),
                     ]
                 else:
                     pivot_pool = [
-                        f"Je comprends bien, {current_name} ! Raconte-moi ce que tu fais d'autre aujourd'hui.",
-                        f"D'accord ! Et sinon, qu'est-ce que tu as prévu pour la suite ?",
-                        f"Je vois ! Parle-moi d'autre chose, {current_name} — tes loisirs, par exemple ?",
+                        (f"Je comprends bien, {current_name} ! Raconte-moi ce que tu fais d'autre aujourd'hui.", f"I understand well, {current_name}! Tell me what else you are doing today."),
+                        (f"D'accord ! Et sinon, qu'est-ce que tu as prévu pour la suite ?", f"Okay! And otherwise, what do you have planned next?"),
+                        (f"Je vois ! Parle-moi d'autre chose, {current_name} — tes loisirs, par exemple ?", f"I see! Tell me about something else, {current_name} — your hobbies, for example?"),
                     ]
                 # Avoid picking a pivot that's itself already in the recent messages
-                choices = [p for p in pivot_pool if p.strip().lower() not in recent_bot_msgs] or pivot_pool
-                bmo_fr = random.choice(choices)
+                choices = [p for p in pivot_pool if p[0].strip().lower() not in recent_bot_msgs] or pivot_pool
+                chosen_fr, chosen_en = random.choice(choices)
+                bmo_fr = chosen_fr
+                bmo_en = chosen_en
+
+            if not bmo_en or bmo_en.strip().lower() == bmo_fr.strip().lower():
+                bmo_en = "Translation unavailable"
 
             self.memory.log_turn(user_text, bmo_fr)
 
@@ -794,7 +800,9 @@ function appendChatMessage(sender, text, translation = '') {
         textDiv.innerText = text;
         div.appendChild(textDiv);
 
-        if (!translation) translation = text;
+        if (!translation || translation.trim() === text.trim()) {
+            translation = "(English translation unavailable)";
+        }
         
         const btn = document.createElement('button');
         btn.className = 'translate-btn-small';
