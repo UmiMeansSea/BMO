@@ -203,7 +203,7 @@ def run_full_benchmark():
             },
             "results": results
         }, f, indent=2, ensure_ascii=False)
-    print(f"\n[OK] Benchmark results saved to: {benchmark_report_path.name}")
+    print(f"\n[OK] Benchmark results saved to: {output_path.name}")
 
 if __name__ == "__main__":
     run_full_benchmark()
