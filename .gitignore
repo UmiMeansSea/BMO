@@ -35,6 +35,22 @@ session_review.json
 /energy_vs_models.png
 /fpo_vs_accuracy.png
 
+# Documentation & Draft Manuscripts (Internal use)
+docs/
+doc/
+*.docx
+*.pdf
+
+# Internal Utility & Test Scripts (Not required for model runtime)
+scripts/generate_paper_docx.py
+scripts/generate_pdf.py
+scripts/zip_release.py
+scripts/evaluate_past_participle_dev.py
+src/local_sanity_check.py
+src/test_20_turns_conv.py
+src/test_voice.py
+
 # System files
 .DS_Store
 Thumbs.db
+

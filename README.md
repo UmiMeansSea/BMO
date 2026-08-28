@@ -66,6 +66,12 @@ We benchmarked BMO across a 50-sentence blind holdout evaluation set of A2/B1 Fr
 ### 3. Error-Type Breakdown (Pedagogical Granularity)
 ![Error Type Breakdown](assets/bmo_error_type_breakdown.png)
 
+### 4. Pedagogical Accuracy vs. Computational Work (FPO)
+![Accuracy vs Computational Work](assets/fpo_vs_accuracy.png)
+
+### 5. Runtime Energy Consumption per Model Architecture
+![Energy Consumption per Turn](assets/energy_vs_models.png)
+
 ---
 
 ## 📂 Repository Structure
@@ -75,14 +81,18 @@ BMO/
 ├── assets/
 │   ├── bmo_full_benchmark_metrics.png   # Publication-quality 300 DPI composite figure
 │   ├── bmo_pareto_efficiency_frontier.png # Pareto efficiency frontier (Latency vs. Pass Rate)
-│   └── bmo_error_type_breakdown.png   # Pedagogical accuracy breakdown by grammar rule
+│   ├── bmo_error_type_breakdown.png   # Pedagogical accuracy breakdown by grammar rule
+│   ├── fpo_vs_accuracy.png             # Green AI evaluation: Accuracy vs. FPO
+│   └── energy_vs_models.png            # Runtime energy consumption per turn (Wh)
 ├── data/
+│   ├── bmo_french_dataset.csv           # French morphological dataset
 │   ├── past_participle_dev_set.json     # 10-sentence diagnostic dev set
 │   └── past_participle_blind_set.json   # 50-sentence unseen blind holdout set
 ├── results/
 │   ├── baseline_dev_set_results.json    # Initial 20% baseline evaluation log
 │   ├── cot_dev_set_results.json         # Dev set CoT evaluation log (80% pass rate)
-│   └── blind_holdout_results.json       # Final 76% blind set evaluation log (3.53s latency)
+│   ├── blind_holdout_results.json       # Final 76% blind set evaluation log (3.53s latency)
+│   └── full_benchmark_results.json      # Full benchmark evaluation log
 ├── scripts/
 │   ├── run_blind_set_eval.py            # Micro-CoT blind holdout evaluator
 │   ├── green_ai_fpo_benchmark.py        # Green AI FPO & energy audit calculator
@@ -94,7 +104,7 @@ BMO/
 │   ├── bmo_dashboard.py                 # Gradio web interface option
 │   └── bmo_live.py                      # Async live terminal pipeline
 ├── build_bmo.py                         # Automated PyInstaller packaging script
-├── .gitignore                           # Git ignore rules for models, build, and dist
+├── .gitignore                           # Git ignore rules for models, build, dist, docs, internal scripts
 └── README.md                            # Main project documentation
 ```
 
